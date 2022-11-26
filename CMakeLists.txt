@@ -10,6 +10,7 @@ project(mk_inz)
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   std_msgs
+  tf
 )
 
 ## System dependencies are found with CMake's conventions
@@ -124,9 +125,6 @@ target_link_libraries(signal ${catkin_LIBRARIES})
 
 add_executable(controler src/controler.cpp)
 target_link_libraries(controler ${catkin_LIBRARIES})
-
-add_executable(signal_1 src/signal_1.cpp)
-target_link_libraries(signal_1 ${catkin_LIBRARIES})
 
 
 ## Declare a C++ library
