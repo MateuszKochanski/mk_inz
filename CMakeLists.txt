@@ -120,8 +120,8 @@ include
   ${catkin_INCLUDE_DIRS}
 )
 
-add_executable(signal src/signal.cpp)
-target_link_libraries(signal ${catkin_LIBRARIES})
+add_executable(hex src/hex.cpp)
+target_link_libraries(hex ${catkin_LIBRARIES})
 
 add_executable(controler src/controler.cpp)
 target_link_libraries(controler ${catkin_LIBRARIES})
