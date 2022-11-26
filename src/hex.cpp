@@ -118,7 +118,6 @@ static Response Receive(SOCKET_HANDLE *socket)
 	return response;
 }
 
-
 static void ShowResponse(Response r)
 {
 	double fx = r.fx / FORCE_DIV;
