@@ -159,9 +159,9 @@ geometry_msgs::Wrench Wyodrebnij(Response r)
 int main ( int argc, char ** argv ) 
 {
 	////////////////////////////////////////////////////////////////////////___________
-	ros::init(argc, argv, "talker");
+	ros::init(argc, argv, "HEX");
 	ros::NodeHandle m;
-	ros::Publisher signal = m.advertise<geometry_msgs::Wrench>("signal",1000);
+	ros::Publisher signal = m.advertise<geometry_msgs::Wrench>("hex",1000);
 	geometry_msgs::Wrench pomiar;
 	/////////////////////////////////////////////////////////////////////
 	Response r;

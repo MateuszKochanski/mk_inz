@@ -167,7 +167,7 @@ int main(int argc, char **argv)
   ros::init(argc, argv, "forceControler");
   ros::NodeHandle n;
 
-  ros::Subscriber hex = n.subscribe("signal", 1000, chatterCallback);
+  ros::Subscriber hex = n.subscribe("hex", 1000, chatterCallback);
   ros::Subscriber TCP = n.subscribe("/es_arm/cartesian_pose", 1000, actualTCPposition);
   sterowanie = n.advertise<geometry_msgs::Pose>("sterowanie",1000);
 
