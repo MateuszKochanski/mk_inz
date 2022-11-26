@@ -35,7 +35,7 @@ double forceValue(geometry_msgs::Wrench hex)
 
 bool czyJestSila(geometry_msgs::Wrench hex)
 {
-  if(forceValue(hex)>0.5)
+  if(forceValue(hex)>1)
     return true;
   else
     return false;
@@ -45,7 +45,7 @@ void findNextPosition(geometry_msgs::Pose actualPosition, geometry_msgs::Wrench 
 {
   
   static tf::TransformBroadcaster br;
-  float scale = 0.02;
+  float scale = 0.01;
   tf::Transform transform(tf::Quaternion(0,0,0,1), tf::Vector3(forces.force.x * scale, forces.force.y * scale, forces.force.z * scale));
   br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "TCP", "tmp"));
 }
@@ -179,21 +179,21 @@ int main(int argc, char **argv)
     ROS_INFO("ASDASDA");
   }*/
   timeWithoutHex = 0;
-
+/*
   actualForces.force.x = 0;
   actualForces.force.y = 1;
   actualForces.force.z = 0;
   actualForces.torque.x = 0;
   actualForces.torque.y = 0;
-  actualForces.torque.z = 0;
+  actualForces.torque.z = 0;*/
 
   while (ros::ok())
   {  
     
     if(timeWithoutHex >= maxTimeWithoutHex)
     {
-      //ROS_WARN("No connection with HEX!");
-      //resetForces();
+      ROS_WARN("No connection with HEX!");
+      resetForces();
     }
     else
       timeWithoutHex += (1.0/(double(loopRate)));
@@ -217,7 +217,7 @@ int main(int argc, char **argv)
         iGotNextPose = false;
       }
     }
-    //fprintf(stdout, "%2f\n", timeWithoutHex);
+
     //ROS_INFO("costam %2f",2.5);
     //sterowanie.publish(data);
     ros::spinOnce();

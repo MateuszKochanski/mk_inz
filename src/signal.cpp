@@ -167,10 +167,10 @@ int main ( int argc, char ** argv )
 	Response r;
 	SOCKET_HANDLE socketHandle;		/* Handle to UDP socket used to communicate with Ethernet DAQ. */
 	
-	fprintf( stderr, "Usage: IPADDRESS: 192.168.1.1:\n" );
+	fprintf( stderr, "Usage: IPADDRESS: 10.42.0.50\n" );
 
 
-	if (Connect(&socketHandle, "192.168.1.1", PORT) != 0) {
+	if (Connect(&socketHandle, "10.42.0.50", PORT) != 0) {
 		fprintf(stderr, "Could not connect to device...");
 		return -1;
 	}
