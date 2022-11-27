@@ -15,17 +15,6 @@ int loopRate = 100;
 double timeWithoutHex;
 const double maxTimeWithoutHex = 0.2;
 bool iGotActualPose = false;
-bool iGotNextPose = false;
-
-bool czyNastZmiana(geometry_msgs::Wrench obecny, geometry_msgs::Wrench poprzedni)
-{
-  if(abs(obecny.force.x - poprzedni.force.x) > 0.5 || abs(obecny.force.y - poprzedni.force.y) > 0.5 || abs(obecny.force.z - poprzedni.force.z) > 0.5)
-  {
-    return true;
-  }
-  else
-    return false;
-}
 
 
 double forceValue(geometry_msgs::Wrench hex)
@@ -33,20 +22,52 @@ double forceValue(geometry_msgs::Wrench hex)
   return sqrt(pow(hex.force.x, 2) + pow(hex.force.y, 2) + pow(hex.force.z, 2));
 }
 
+bool czySilaPrzekracza(geometry_msgs::Wrench hex, double C)
+{
+  if (abs(hex.force.x) > C || abs(hex.force.y) > C || abs(hex.force.z) > C)
+    return true;
+  else
+    return true;
+}
+
 bool czyJestSila(geometry_msgs::Wrench hex)
 {
-  if(forceValue(hex)>1)
+  if(czySilaPrzekracza(hex, 0.5))
     return true;
   else
     return false;
 }
 
-void findNextPosition(geometry_msgs::Pose actualPosition, geometry_msgs::Wrench forces)
+void findTransformToNextPosition(geometry_msgs::Wrench forces)
 {
-  
+
   static tf::TransformBroadcaster br;
-  float scale = 0.01;
-  tf::Transform transform(tf::Quaternion(0,0,0,1), tf::Vector3(forces.force.x * scale, forces.force.y * scale, forces.force.z * scale));
+  double prog = 0.5;
+  double scale = 0.01;
+  double x, y, z;
+  
+  if (forces.force.x > prog)
+    x = (forces.force.x - prog) * scale;
+  else if (forces.force.x < -prog)
+    x = (forces.force.x + prog) * scale;
+  else
+    x = 0;
+
+  if (forces.force.y > prog)
+    y = (forces.force.y - prog) * scale;
+  else if (forces.force.y < -prog)
+    y = (forces.force.y + prog) * scale;
+  else
+    y = 0;
+
+  if (forces.force.z > prog)
+    z = (forces.force.z - prog) * scale;
+  else if (forces.force.z < -prog)
+    z = (forces.force.z + prog) * scale;
+  else
+    z = 0;
+
+  tf::Transform transform(tf::Quaternion(0, 0, 0, 1), tf::Vector3(x, y, z));
   br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "TCP", "tmp"));
 }
 
@@ -82,7 +103,7 @@ void calculateGlobalTargetPosition()
     nextPose.position.x = transform.getOrigin().getX();
     nextPose.position.y = transform.getOrigin().getY();
     nextPose.position.z = transform.getOrigin().getZ();
-    iGotNextPose = true;
+    iHaveTarget = true;
 
   }
   catch(tf::TransformException &ex)
@@ -175,51 +196,45 @@ int main(int argc, char **argv)
 
   ros::Rate loop_rate(loopRate); 
 
-  /*while(!getAnyActualPose){
-    ROS_INFO("ASDASDA");
-  }*/
+
   timeWithoutHex = 0;
-/*
+
   actualForces.force.x = 0;
   actualForces.force.y = 1;
-  actualForces.force.z = 0;
+  actualForces.force.z = 0.6;
   actualForces.torque.x = 0;
   actualForces.torque.y = 0;
-  actualForces.torque.z = 0;*/
+  actualForces.torque.z = 0;
 
   while (ros::ok())
   {  
     
-    if(timeWithoutHex >= maxTimeWithoutHex)
-    {
-      ROS_WARN("No connection with HEX!");
-      resetForces();
-    }
-    else
-      timeWithoutHex += (1.0/(double(loopRate)));
+    // if(timeWithoutHex >= maxTimeWithoutHex)
+    // {
+    //   ROS_WARN("No connection with HEX!");
+    //   resetForces();
+    // }
+    // else
+    //   timeWithoutHex += (1.0/(double(loopRate)));
 
 
-    if(!iGotNextPose && iGotActualPose)
+    if(!iHaveTarget && iGotActualPose)
     {
-      findNextPosition(actualPose, actualForces);
-      if(!iGotNextPose)
+      findTransformToNextPosition(actualForces);
+      if(!iHaveTarget)
         calculateGlobalTargetPosition();
-      iHaveTarget = true;
     }
     else
     {
-      if(iGotNextPose)
+      if(iHaveTarget)
         sterowanie.publish(nextPose);
       
       if(meetATarget())
       {
         iHaveTarget = false;
-        iGotNextPose = false;
       }
     }
 
-    //ROS_INFO("costam %2f",2.5);
-    //sterowanie.publish(data);
     ros::spinOnce();
     loop_rate.sleep();
 

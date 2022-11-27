@@ -1,0 +1,4 @@
+<launch>
+    <node pkg="mk_inz" type="hex" name="hex"/>
+    <node pkg="mk_inz" type="controler" name="controler"/>
+</launch>
