@@ -38,43 +38,50 @@ bool czyJestSila(geometry_msgs::Wrench hex)
     return false;
 }
 
+
+double cutValue(double wartosc, double prog, double skala)
+{ 
+  double wynik;
+  if (wartosc > prog)
+    wynik = (wartosc - prog);
+  else if (wartosc < -prog)
+    wynik = (wartosc + prog);
+  else
+    wynik = 0;
+
+  return wynik * skala;
+}
+
 void findTransformToNextPosition(geometry_msgs::Wrench forces)
 {
 
   static tf::TransformBroadcaster br;
-  double prog = 0.5;
-  double scale = 0.01;
-  double x, y, z;
+  double progF = 0.5;
+  double progT = 0.5;
+  double scale = 0.1;
+  double aScale = 0.05;
+  double x, y, z, rx, ry, rz;
+
+  tf::Quaternion angleTransform;
   
-  if (forces.force.x > prog)
-    x = (forces.force.x - prog) * scale;
-  else if (forces.force.x < -prog)
-    x = (forces.force.x + prog) * scale;
-  else
-    x = 0;
+  x = cutValue(forces.force.x, progF, scale);
+  y = cutValue(forces.force.y, progF, scale);
+  z = cutValue(forces.force.z, progF, scale);
 
-  if (forces.force.y > prog)
-    y = (forces.force.y - prog) * scale;
-  else if (forces.force.y < -prog)
-    y = (forces.force.y + prog) * scale;
-  else
-    y = 0;
+  rx = cutValue(forces.torque.x, progT, aScale);
+  ry = cutValue(forces.torque.y, progT, aScale);
+  rz = cutValue(forces.torque.z, progT, aScale);
 
-  if (forces.force.z > prog)
-    z = (forces.force.z - prog) * scale;
-  else if (forces.force.z < -prog)
-    z = (forces.force.z + prog) * scale;
-  else
-    z = 0;
+  angleTransform.setRPY(rx, ry, rz);
+  tf::Transform transform(angleTransform, tf::Vector3(x, y, z));
 
-  tf::Transform transform(tf::Quaternion(0, 0, 0, 1), tf::Vector3(x, y, z));
   br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "TCP", "tmp"));
 }
 
 bool meetATarget()
 {
   double odleglosc = tf::tfDistance(tf::Vector3(actualPose.position.x, actualPose.position.y, actualPose.position.z), tf::Vector3(nextPose.position.x, nextPose.position.y, nextPose.position.z));
-  ROS_INFO("%2f",odleglosc);
+  //ROS_INFO("%2f",odleglosc);
   if(odleglosc < 0.01 )
     return true;
   else
@@ -96,10 +103,23 @@ void calculateGlobalTargetPosition()
     transform.setRotation(stampedTransform.getRotation());
     broadcaster.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "base", "NEXT_TCP"));
 
-    nextPose.orientation.x = transform.getRotation().getX();
-    nextPose.orientation.y = transform.getRotation().getY();
-    nextPose.orientation.z = transform.getRotation().getZ();
-    nextPose.orientation.w = transform.getRotation().getW();
+    // nextPose.orientation.x = transform.getRotation().getX();
+    // nextPose.orientation.y = transform.getRotation().getY();
+    // nextPose.orientation.z = transform.getRotation().getZ();
+    // nextPose.orientation.w = transform.getRotation().getW();
+    tf::Matrix3x3 m(transform.getRotation());
+    double roll, pitch, yaw;
+    m.getEulerYPR(yaw, pitch, roll);
+
+    yaw = yaw*(180.0/3.14);
+    pitch = pitch*(180.0/3.14);
+    roll = roll*(180.0/3.14);
+
+    nextPose.orientation.x = yaw;
+    nextPose.orientation.y = pitch;
+    nextPose.orientation.z = roll;
+    ROS_INFO("%2f, %2f, %2f", yaw, pitch, roll);
+
     nextPose.position.x = transform.getOrigin().getX();
     nextPose.position.y = transform.getOrigin().getY();
     nextPose.position.z = transform.getOrigin().getZ();
@@ -201,9 +221,9 @@ int main(int argc, char **argv)
 
   actualForces.force.x = 0;
   actualForces.force.y = 1;
-  actualForces.force.z = 0.6;
+  actualForces.force.z = 0;
   actualForces.torque.x = 0;
-  actualForces.torque.y = 0;
+  actualForces.torque.y = 1;
   actualForces.torque.z = 0;
 
   while (ros::ok())
