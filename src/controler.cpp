@@ -58,8 +58,8 @@ void findTransformToNextPosition(geometry_msgs::Wrench forces)
   static tf::TransformBroadcaster br;
   double progF = 0.5;
   double progT = 0.5;
-  double scale = 0.1;
-  double aScale = 0.05;
+  double scale = 0.01;
+  double aScale = 0.00;
   double x, y, z, rx, ry, rz;
 
   tf::Quaternion angleTransform;
@@ -73,7 +73,8 @@ void findTransformToNextPosition(geometry_msgs::Wrench forces)
   rz = cutValue(forces.torque.z, progT, aScale);
 
   angleTransform.setRPY(rx, ry, rz);
-  tf::Transform transform(angleTransform, tf::Vector3(x, y, z));
+  // tf::Transform transform(angleTransform, tf::Vector3(x, y, z));
+  tf::Transform transform(angleTransform, tf::Vector3(-y, x, z));
 
   br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "TCP", "tmp"));
 }
@@ -229,13 +230,13 @@ int main(int argc, char **argv)
   while (ros::ok())
   {  
     
-    // if(timeWithoutHex >= maxTimeWithoutHex)
-    // {
-    //   ROS_WARN("No connection with HEX!");
-    //   resetForces();
-    // }
-    // else
-    //   timeWithoutHex += (1.0/(double(loopRate)));
+    if(timeWithoutHex >= maxTimeWithoutHex)
+    {
+      ROS_WARN("No connection with HEX!");
+      resetForces();
+    }
+    else
+      timeWithoutHex += (1.0/(double(loopRate)));
 
 
     if(!iHaveTarget && iGotActualPose)

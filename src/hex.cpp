@@ -14,8 +14,8 @@ typedef int SOCKET_HANDLE;
 
 #define PORT			49152	/* Port the Ethernet DAQ always uses */
 #define SAMPLE_COUNT	100		/* 10 incoming samples */
-#define SPEED			10		/* 1000 / SPEED = Speed in Hz */
-#define FILTER			4		/* 0 = No filter; 1 = 500 Hz; 2 = 150 Hz; 3 = 50 Hz; 4 = 15 Hz; 5 = 5 Hz; 6 = 1.5 Hz */
+#define SPEED			100		/* 1000 / SPEED = Speed in Hz */
+#define FILTER			5		/* 0 = No filter; 1 = 500 Hz; 2 = 150 Hz; 3 = 50 Hz; 4 = 15 Hz; 5 = 5 Hz; 6 = 1.5 Hz */
 #define BIASING_ON		0xFF    /* Biasing on */
 #define BIASING_OFF		0x00    /* Biasing off */
 
@@ -158,7 +158,7 @@ geometry_msgs::Wrench Wyodrebnij(Response r)
 int main ( int argc, char ** argv ) 
 {
 	////////////////////////////////////////////////////////////////////////___________
-	ros::init(argc, argv, "HEX");
+	ros::init(argc, argv, "signal");
 	ros::NodeHandle m;
 	ros::Publisher signal = m.advertise<geometry_msgs::Wrench>("hex",1000);
 	geometry_msgs::Wrench pomiar;
@@ -181,18 +181,29 @@ int main ( int argc, char ** argv )
 
 	while (ros::ok())
 	{	
-		for (int i = 0; i < SAMPLE_COUNT; i++)
+		SendCommand(&socketHandle, COMMAND_START, SAMPLE_COUNT);
+		// for (int i = 0; i < SAMPLE_COUNT; i++)
+		// {
+			
+		// 	r = Receive(&socketHandle);
+		// 	ShowResponse(r);
+		// 	////////////////////////////////////////////////////////////////////////////______________
+		// 	pomiar = Wyodrebnij(r);
+		// 	signal.publish(pomiar);
+		// 	ROS_INFO("test");
+		// 	////////////////////////////////////////////////////////////////////////////////
+		// }	
+
+		do
 		{
-			if (i == 0)
-				SendCommand(&socketHandle, COMMAND_START, SAMPLE_COUNT);	
 
 			r = Receive(&socketHandle);
 			ShowResponse(r);
 			////////////////////////////////////////////////////////////////////////////______________
 			pomiar = Wyodrebnij(r);
 			signal.publish(pomiar);
-			////////////////////////////////////////////////////////////////////////////////
-		}	
+			ROS_INFO("test");
+		}while(r.sampleCounter < (SAMPLE_COUNT - 1));
 
 	}
 	Close(&socketHandle);
