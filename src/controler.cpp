@@ -1,6 +1,7 @@
 #include "ros/ros.h"
 #include "geometry_msgs/Wrench.h"
 #include "geometry_msgs/Pose.h"
+#include "geometry_msgs/PoseStamped.h"
 #include "std_msgs/String.h"
 #include "std_msgs/Header.h"
 #include <cmath>
@@ -22,6 +23,9 @@ bool moveIsDone = true;
 bool anyForce = false;
 const double maxTimeWithoutDone = 5.0;
 double timeWithoutDone;
+bool nextPoseAccepted = false;
+geometry_msgs::PoseStamped messege;
+
 
 
 double forceValue(geometry_msgs::Wrench hex)
@@ -174,17 +178,32 @@ void chatterCallback(const geometry_msgs::Wrench& msg)
   timeWithoutHex = 0;
 }
 
-void doneCallback(const std_msgs::String::ConstPtr& str)
+//void doneCallback(const std_msgs::String::ConstPtr& str)
+void doneCallback(const std_msgs::Header head)
 {
-  std::cout<<str->data.c_str()<<std::endl;
-  std::string ok = str->data.c_str();
+  //std::cout<<head.seq<<std::endl;
+  //moveIsDone = true;
 
-  if(ok == "ok")
+  if(head.stamp== messege.header.stamp)
   {
-    moveIsDone = true;
-    ROS_INFO("OK");
-    timeWithoutDone = 0.0;
+    if(head.frame_id == "accepted")
+      nextPoseAccepted = true;
+    else if(head.frame_id == "done")
+    {
+      moveIsDone = true;
+    }
   }
+  ROS_INFO("ASD");
+
+  // std::cout<<str->data.c_str()<<std::endl;
+  // std::string ok = str->data.c_str();
+
+  // if(ok == "ok")
+  // {
+  //   moveIsDone = true;
+  //   ROS_INFO("OK");
+  //   timeWithoutDone = 0.0;
+  // }
   
 }
 
@@ -226,6 +245,22 @@ void actualTCPposition(const geometry_msgs::Pose& msg)
   iHaveActualPose = true;
 }
 
+
+geometry_msgs::PoseStamped prepareMessege(geometry_msgs::Pose pose)
+{
+  //static uint seq = 0;
+  geometry_msgs::PoseStamped msg;
+  msg.pose = pose;
+
+  msg.header.frame_id = "NextPose";
+  msg.header.stamp = ros::Time::now();
+  msg.header.seq = 0;//seq;
+  //seq++;
+
+  return msg;
+}
+
+
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "forceControler");
@@ -234,7 +269,7 @@ int main(int argc, char **argv)
   ros::Subscriber hex = n.subscribe("hex", 10, chatterCallback);
   ros::Subscriber TCP = n.subscribe("/es_arm/cartesian_pose", 10, actualTCPposition);
   ros::Subscriber done = n.subscribe("/es_master/done", 10, doneCallback);
-  sterowanie = n.advertise<geometry_msgs::Pose>("sterowanie",1000);
+  sterowanie = n.advertise<geometry_msgs::PoseStamped>("sterowanie",1000);
   header = n.advertise<std_msgs::Header>("header",1000);
 
 	geometry_msgs::Wrench pomiar;
@@ -254,10 +289,10 @@ int main(int argc, char **argv)
   anyForce = true;
 ////////////////////////////////////////////////////
 
-  std_msgs::Header head;
-  head.frame_id = "NextPose";
-  head.stamp = ros::Time::now();
-  head.seq = 1;
+  
+
+  bool messegeExist = false;
+
 
   while (ros::ok())
   {  
@@ -291,6 +326,7 @@ int main(int argc, char **argv)
     //   timeWithoutDone += (1.0/(double(loopRate)));
       
     // }
+   
 
 
     if(moveIsDone)
@@ -300,13 +336,28 @@ int main(int argc, char **argv)
         findTransformToNextPosition(actualForces);
         if(calculateGlobalTargetPosition())
         {
-          moveIsDone = false; 
-          sterowanie.publish(nextPose);
-          head.stamp = ros::Time::now();
-          header.publish(head);
+          moveIsDone = false;
+          nextPoseAccepted = false; 
+          messege = prepareMessege(nextPose);
+          messegeExist=true;
+          //sterowanie.publish(messege);
         }
       }
     }
+    else
+    {
+      if(!nextPoseAccepted)
+      {
+        if((ros::Time::now()  - messege.header.stamp) > ros::Duration(5.0) ) //sprawdza czy minelo 0.2s od wyslania wiadomosci do przyjecia
+        {
+          ROS_ERROR("Next pose not accepted!");
+          return(0);
+        }
+      }
+    }
+
+    if(messegeExist)
+      sterowanie.publish(messege);
 
     ros::spinOnce();
     loop_rate.sleep();
