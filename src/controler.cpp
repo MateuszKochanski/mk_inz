@@ -9,12 +9,13 @@
 ros::Publisher sterowanie;
 geometry_msgs::Pose actualPose;
 geometry_msgs::Pose nextPose;
-bool iHaveTarget = false;
 geometry_msgs::Wrench actualForces;
 int loopRate = 100;
 double timeWithoutHex;
 const double maxTimeWithoutHex = 0.2;
 bool iGotActualPose = false;
+bool moveIsDone = true;
+bool anyForce = false;
 
 
 double forceValue(geometry_msgs::Wrench hex)
@@ -78,7 +79,7 @@ void findTransformToNextPosition(geometry_msgs::Wrench forces)
 
   br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "TCP", "tmp"));
 }
-
+/*
 bool meetATarget()
 {
   double odleglosc = tf::tfDistance(tf::Vector3(actualPose.position.x, actualPose.position.y, actualPose.position.z), tf::Vector3(nextPose.position.x, nextPose.position.y, nextPose.position.z));
@@ -87,10 +88,12 @@ bool meetATarget()
     return true;
   else
     return false;
-}
+}*/
 
-void calculateGlobalTargetPosition()
+bool calculateGlobalTargetPosition()
 {
+  bool succed = false;
+
   static tf::TransformListener listener;
   static tf::TransformBroadcaster broadcaster;
   tf::StampedTransform stampedTransform;
@@ -124,7 +127,8 @@ void calculateGlobalTargetPosition()
     nextPose.position.x = transform.getOrigin().getX();
     nextPose.position.y = transform.getOrigin().getY();
     nextPose.position.z = transform.getOrigin().getZ();
-    iHaveTarget = true;
+    //iHaveTarget = true;
+    succed = true;
 
   }
   catch(tf::TransformException &ex)
@@ -132,6 +136,7 @@ void calculateGlobalTargetPosition()
     ROS_ERROR("%s",ex.what());
   }
 
+  return succed;
 }
 
 void resetForces()
@@ -142,6 +147,7 @@ void resetForces()
     actualForces.torque.x = 0;
     actualForces.torque.y = 0;
     actualForces.torque.z = 0;
+    anyForce = false;
 }
 
 void chatterCallback(const geometry_msgs::Wrench& msg)
@@ -153,12 +159,25 @@ void chatterCallback(const geometry_msgs::Wrench& msg)
   if(czyJestSila(msg))
   {
     actualForces = msg;
+    anyForce = true;
   }
   else
   { 
     resetForces();
   } 
   timeWithoutHex = 0;
+}
+
+void doneCallback(const std_msgs::String::ConstPtr& str)
+{
+  std::cout<<str->data.c_str()<<std::endl;
+  std::string ok = "ok";
+  if(str->data.c_str() == ok.c_str())
+  {
+    
+    ROS_INFO("OK");
+  }
+  moveIsDone = true;
 }
 
 tf::Quaternion msgToTfDatatype(geometry_msgs::Quaternion msg)
@@ -209,8 +228,9 @@ int main(int argc, char **argv)
   ros::init(argc, argv, "forceControler");
   ros::NodeHandle n;
 
-  ros::Subscriber hex = n.subscribe("hex", 1000, chatterCallback);
-  ros::Subscriber TCP = n.subscribe("/es_arm/cartesian_pose", 1000, actualTCPposition);
+  ros::Subscriber hex = n.subscribe("hex", 10, chatterCallback);
+  ros::Subscriber TCP = n.subscribe("/es_arm/cartesian_pose", 10, actualTCPposition);
+  ros::Subscriber done = n.subscribe("/es_master/done", 10, doneCallback);
   sterowanie = n.advertise<geometry_msgs::Pose>("sterowanie",1000);
 
 	geometry_msgs::Wrench pomiar;
@@ -219,17 +239,19 @@ int main(int argc, char **argv)
 
 
   timeWithoutHex = 0;
-
+/////////////////////////////////////////////////////Do zakomentowania
   actualForces.force.x = 0;
   actualForces.force.y = 1;
   actualForces.force.z = 0;
   actualForces.torque.x = 0;
-  actualForces.torque.y = 1;
+  actualForces.torque.y = 0;
   actualForces.torque.z = 0;
+  anyForce = true;
+////////////////////////////////////////////////////
 
   while (ros::ok())
   {  
-    
+    /*
     if(timeWithoutHex >= maxTimeWithoutHex)
     {
       ROS_WARN("No connection with HEX!");
@@ -237,22 +259,18 @@ int main(int argc, char **argv)
     }
     else
       timeWithoutHex += (1.0/(double(loopRate)));
+    */
 
-
-    if(!iHaveTarget && iGotActualPose)
+    if(moveIsDone)
     {
-      findTransformToNextPosition(actualForces);
-      if(!iHaveTarget)
-        calculateGlobalTargetPosition();
-    }
-    else
-    {
-      if(iHaveTarget)
-        sterowanie.publish(nextPose);
-      
-      if(meetATarget())
+      if(iGotActualPose && anyForce)
       {
-        iHaveTarget = false;
+        findTransformToNextPosition(actualForces);
+        if(calculateGlobalTargetPosition())
+        {
+          moveIsDone = false; 
+          sterowanie.publish(nextPose);
+        }
       }
     }
 
