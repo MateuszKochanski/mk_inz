@@ -9,24 +9,17 @@
 #include <tf/transform_listener.h>
 
 ros::Publisher sterowanie;
-ros::Publisher header;
-geometry_msgs::Pose actualPose;
 geometry_msgs::Pose nextPose;
 geometry_msgs::Wrench actualForces;
+geometry_msgs::PoseStamped messege;
 int loopRate = 100;
-double timeWithoutHex;
-double timeWithoutActualPosition;
-const double maxTimeWithoutHex = 0.2;
-const double maxTimeWithoutActualPosition = 0.2;
 bool iHaveActualPose = false;
 bool moveIsDone = true;
 bool anyForce = false;
-const double maxTimeWithoutDone = 5.0;
 double timeWithoutDone;
 bool nextPoseAccepted = false;
-geometry_msgs::PoseStamped messege;
-
-
+ros::Time lastActualPoseTime;
+ros::Time lastHexTime;
 
 double forceValue(geometry_msgs::Wrench hex)
 {
@@ -89,19 +82,12 @@ void findTransformToNextPosition(geometry_msgs::Wrench forces)
 
   br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "TCP", "tmp"));
 }
-/*
-bool meetATarget()
-{
-  double odleglosc = tf::tfDistance(tf::Vector3(actualPose.position.x, actualPose.position.y, actualPose.position.z), tf::Vector3(nextPose.position.x, nextPose.position.y, nextPose.position.z));
-  //ROS_INFO("%2f",odleglosc);
-  if(odleglosc < 0.01 )
-    return true;
-  else
-    return false;
-}*/
+
 
 bool calculateGlobalTargetPosition()
 {
+  //geometry_msgs::Pose *nextPosee = nullptr;
+
   bool succed = false;
 
   static tf::TransformListener listener;
@@ -137,7 +123,6 @@ bool calculateGlobalTargetPosition()
     nextPose.position.x = transform.getOrigin().getX();
     nextPose.position.y = transform.getOrigin().getY();
     nextPose.position.z = transform.getOrigin().getZ();
-    //iHaveTarget = true;
     succed = true;
 
   }
@@ -163,7 +148,6 @@ void resetForces()
 void chatterCallback(const geometry_msgs::Wrench& msg)
 {
 
-  static geometry_msgs::Wrench poprzedniHex(msg);
   fprintf(stdout,"Fx: %.2f N Fy: %.2f N Fz: %.2f N Tx: %.2f Nm Ty: %.2f Nm Tz: %.2f Nm\r\n",
     msg.force.x, msg.force.y, msg.force.z, msg.torque.x, msg.torque.y, msg.torque.z);
   if(czyJestSila(msg))
@@ -175,16 +159,12 @@ void chatterCallback(const geometry_msgs::Wrench& msg)
   { 
     resetForces();
   } 
-  timeWithoutHex = 0;
+  lastHexTime = ros::Time::now();
 }
 
-//void doneCallback(const std_msgs::String::ConstPtr& str)
 void doneCallback(const std_msgs::Header head)
 {
-  //std::cout<<head.seq<<std::endl;
-  //moveIsDone = true;
-
-  if(head.stamp== messege.header.stamp)
+  if(head.stamp == messege.header.stamp)
   {
     if(head.frame_id == "accepted")
       nextPoseAccepted = true;
@@ -193,18 +173,6 @@ void doneCallback(const std_msgs::Header head)
       moveIsDone = true;
     }
   }
-  ROS_INFO("ASD");
-
-  // std::cout<<str->data.c_str()<<std::endl;
-  // std::string ok = str->data.c_str();
-
-  // if(ok == "ok")
-  // {
-  //   moveIsDone = true;
-  //   ROS_INFO("OK");
-  //   timeWithoutDone = 0.0;
-  // }
-  
 }
 
 tf::Quaternion msgToTfDatatype(geometry_msgs::Quaternion msg)
@@ -221,41 +189,23 @@ void actualTCPposition(const geometry_msgs::Pose& msg)
 {
   static tf::TransformBroadcaster br;
   tf::Quaternion a = msgToTfDatatype(msg.orientation);
-  tf::Quaternion b = a.inverse();
-    
   
-  tf::Matrix3x3 n(b);
-  double roll1, pitch1, yaw1;
-  n.getEulerYPR(yaw1, pitch1, roll1);
-
-
-  tf::Matrix3x3 m(a);
-  double roll, pitch, yaw;
-  m.getEulerYPR(yaw, pitch, roll);
-  
-  
-  actualPose = msg;
-  
-
-
   tf::Transform transform(a, tf::Vector3(msg.position.x, msg.position.y, msg.position.z));
   br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "base", "TCP"));
 
-  timeWithoutActualPosition = 0;
+  lastActualPoseTime = ros::Time::now();
   iHaveActualPose = true;
 }
 
 
 geometry_msgs::PoseStamped prepareMessege(geometry_msgs::Pose pose)
 {
-  //static uint seq = 0;
   geometry_msgs::PoseStamped msg;
   msg.pose = pose;
 
   msg.header.frame_id = "NextPose";
   msg.header.stamp = ros::Time::now();
-  msg.header.seq = 0;//seq;
-  //seq++;
+  //msg.header.seq = 0;
 
   return msg;
 }
@@ -270,15 +220,15 @@ int main(int argc, char **argv)
   ros::Subscriber TCP = n.subscribe("/es_arm/cartesian_pose", 10, actualTCPposition);
   ros::Subscriber done = n.subscribe("/es_master/done", 10, doneCallback);
   sterowanie = n.advertise<geometry_msgs::PoseStamped>("sterowanie",1000);
-  header = n.advertise<std_msgs::Header>("header",1000);
-
-	geometry_msgs::Wrench pomiar;
-
-  ros::Rate loop_rate(loopRate); 
 
 
-  timeWithoutHex = 0;
-  timeWithoutActualPosition = 0;
+  const double maxTimeWithoutHex = 0.2;
+  const double maxTimeWithoutActualPosition = 0.2;
+  const double maxTimeWithoutAcceptation = 0.5;
+
+  lastActualPoseTime = ros::Time::now();
+  lastHexTime = ros::Time::now();
+  
 /////////////////////////////////////////////////////Do zakomentowania
   actualForces.force.x = 0;
   actualForces.force.y = 0;
@@ -289,50 +239,31 @@ int main(int argc, char **argv)
   anyForce = true;
 ////////////////////////////////////////////////////
 
-  
-
   bool messegeExist = false;
+  ros::Time now;
 
-
+  ros::Rate loop_rate(loopRate); 
+  
   while (ros::ok())
   {  
-    
-    // if(timeWithoutHex >= maxTimeWithoutHex)
+    now = ros::Time::now();
+
+    // if((now - lastHexTime) >= ros::Duration(maxTimeWithoutHex))
     // {
     //   ROS_WARN("No connection with HEX!");
     //   resetForces();
     // }
-    // else
-    //   timeWithoutHex += (1.0/(double(loopRate)));
     
-    if(timeWithoutActualPosition >= maxTimeWithoutActualPosition)
+    if((now - lastActualPoseTime) >= ros::Duration(maxTimeWithoutActualPosition))
     {
       ROS_WARN("No connection with robot!");
       iHaveActualPose = false;
-    }
-    else
-    {
-      timeWithoutActualPosition += (1.0/(double(loopRate)));
-    }
-      
-    
-    // if(timeWithoutDone >= maxTimeWithoutDone)
-    // {
-    //   ROS_ERROR("STOP");
-    //   return(-1);
-    // }
-    // else
-    // {
-    //   timeWithoutDone += (1.0/(double(loopRate)));
-      
-    // }
-   
-
+    }      
 
     if(moveIsDone)
     {
       if(iHaveActualPose && anyForce)
-      {
+      {   
         findTransformToNextPosition(actualForces);
         if(calculateGlobalTargetPosition())
         {
@@ -340,7 +271,6 @@ int main(int argc, char **argv)
           nextPoseAccepted = false; 
           messege = prepareMessege(nextPose);
           messegeExist=true;
-          //sterowanie.publish(messege);
         }
       }
     }
@@ -348,7 +278,7 @@ int main(int argc, char **argv)
     {
       if(!nextPoseAccepted)
       {
-        if((ros::Time::now()  - messege.header.stamp) > ros::Duration(5.0) ) //sprawdza czy minelo 0.2s od wyslania wiadomosci do przyjecia
+        if((now  - messege.header.stamp) > ros::Duration(maxTimeWithoutAcceptation) ) //sprawdza czy minelo 0.5s od wyslania wiadomosci do przyjecia
         {
           ROS_ERROR("Next pose not accepted!");
           return(0);
