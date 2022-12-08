@@ -31,7 +31,7 @@ bool czySilaPrzekracza(geometry_msgs::Wrench hex, double C)
   if (abs(hex.force.x) > C || abs(hex.force.y) > C || abs(hex.force.z) > C)
     return true;
   else
-    return true;
+    return false;
 }
 
 bool czyJestSila(geometry_msgs::Wrench hex)
@@ -70,7 +70,10 @@ void findTransformToNextPosition(geometry_msgs::Wrench forces)
   
   x = cutValue(forces.force.x, progF, scale);
   y = cutValue(forces.force.y, progF, scale);
-  z = cutValue(forces.force.z, progF, scale);
+  z = cutValue(forces.force.z, 0.7, scale);
+
+  fprintf(stdout,"Fx: %.2f N Fy: %.2f N Fz: %.2f N dx: %.4f m dy: %.4f m dz: %.4f m\r\n",
+    actualForces.force.x, actualForces.force.y, actualForces.force.z, x, y, z);
 
   rx = cutValue(forces.torque.x, progT, aScale);
   ry = cutValue(forces.torque.y, progT, aScale);
@@ -97,7 +100,9 @@ bool calculateGlobalTargetPosition()
   
   try
   {
-    listener.lookupTransform("base","tmp",ros::Time(0), stampedTransform);
+    ros::Time now = ros::Time::now();
+    listener.waitForTransform("base","tmp",now,ros::Duration(1.0));
+    listener.lookupTransform("base","tmp",now, stampedTransform);
     tf::Transform transform;
     transform.setOrigin(stampedTransform.getOrigin());
     transform.setRotation(stampedTransform.getRotation());
@@ -118,7 +123,7 @@ bool calculateGlobalTargetPosition()
     nextPose.orientation.x = yaw;
     nextPose.orientation.y = pitch;
     nextPose.orientation.z = roll;
-    ROS_INFO("%2f, %2f, %2f", yaw, pitch, roll);
+    //ROS_INFO("%2f, %2f, %2f", yaw, pitch, roll);
 
     nextPose.position.x = transform.getOrigin().getX();
     nextPose.position.y = transform.getOrigin().getY();
@@ -148,8 +153,8 @@ void resetForces()
 void chatterCallback(const geometry_msgs::Wrench& msg)
 {
 
-  fprintf(stdout,"Fx: %.2f N Fy: %.2f N Fz: %.2f N Tx: %.2f Nm Ty: %.2f Nm Tz: %.2f Nm\r\n",
-    msg.force.x, msg.force.y, msg.force.z, msg.torque.x, msg.torque.y, msg.torque.z);
+  // fprintf(stdout,"Fx: %.2f N Fy: %.2f N Fz: %.2f N Tx: %.2f Nm Ty: %.2f Nm Tz: %.2f Nm\r\n",
+  //   msg.force.x, msg.force.y, msg.force.z, msg.torque.x, msg.torque.y, msg.torque.z);
   if(czyJestSila(msg))
   {
     actualForces = msg;
@@ -160,6 +165,7 @@ void chatterCallback(const geometry_msgs::Wrench& msg)
     resetForces();
   } 
   lastHexTime = ros::Time::now();
+  
 }
 
 void doneCallback(const std_msgs::Header head)
@@ -230,13 +236,13 @@ int main(int argc, char **argv)
   lastHexTime = ros::Time::now();
   
 /////////////////////////////////////////////////////Do zakomentowania
-  actualForces.force.x = 0;
-  actualForces.force.y = 0;
-  actualForces.force.z = 0;
-  actualForces.torque.x = 0;
-  actualForces.torque.y = 0;
-  actualForces.torque.z = 0;
-  anyForce = true;
+  // actualForces.force.x = 0;
+  // actualForces.force.y = 0;
+  // actualForces.force.z = 0;
+  // actualForces.torque.x = 0;
+  // actualForces.torque.y = 0;
+  // actualForces.torque.z = 0;
+  // anyForce = true;
 ////////////////////////////////////////////////////
 
   bool messegeExist = false;
@@ -248,11 +254,11 @@ int main(int argc, char **argv)
   {  
     now = ros::Time::now();
 
-    // if((now - lastHexTime) >= ros::Duration(maxTimeWithoutHex))
-    // {
-    //   ROS_WARN("No connection with HEX!");
-    //   resetForces();
-    // }
+    if((now - lastHexTime) >= ros::Duration(maxTimeWithoutHex))
+    {
+      ROS_WARN("No connection with HEX!");
+      resetForces();
+    }
     
     if((now - lastActualPoseTime) >= ros::Duration(maxTimeWithoutActualPosition))
     {
@@ -284,6 +290,7 @@ int main(int argc, char **argv)
           return(0);
         }
       }
+      anyForce = false;
     }
 
     if(messegeExist)
