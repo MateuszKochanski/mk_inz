@@ -17,7 +17,7 @@ bool iHaveActualPose = false;
 bool moveIsDone = true;
 bool anyForce = false;
 double timeWithoutDone;
-bool nextPoseAccepted = false;
+bool nextPoseAccepted = true;
 ros::Time lastActualPoseTime;
 ros::Time lastHexTime;
 
@@ -101,8 +101,7 @@ bool calculateGlobalTargetPosition()
   try
   {
     ros::Time now = ros::Time::now();
-    listener.waitForTransform("base","tmp",now,ros::Duration(1.0));
-    listener.lookupTransform("base","tmp",now, stampedTransform);
+    listener.lookupTransform("base","tmp",ros::Time(0), stampedTransform);
     tf::Transform transform;
     transform.setOrigin(stampedTransform.getOrigin());
     transform.setRotation(stampedTransform.getRotation());
@@ -236,16 +235,12 @@ int main(int argc, char **argv)
   lastHexTime = ros::Time::now();
   
 /////////////////////////////////////////////////////Do zakomentowania
-  // actualForces.force.x = 0;
-  // actualForces.force.y = 0;
-  // actualForces.force.z = 0;
-  // actualForces.torque.x = 0;
-  // actualForces.torque.y = 0;
-  // actualForces.torque.z = 0;
-  // anyForce = true;
+  //bool kierunek = true;
 ////////////////////////////////////////////////////
 
+  bool nextPoseExist = false;
   bool messegeExist = false;
+  resetForces();
   ros::Time now;
 
   ros::Rate loop_rate(loopRate); 
@@ -253,49 +248,70 @@ int main(int argc, char **argv)
   while (ros::ok())
   {  
     now = ros::Time::now();
+    /////////////////////////////////////////// symulowanie hexa
+    // if(kierunek)
+    //   actualForces.force.z += 1.0/loopRate;
+    // else
+    //   actualForces.force.z -= 1.0/loopRate;
 
+    // if (actualForces.force.z > 5.0)
+    //   kierunek =false;
+    // else if (actualForces.force.z < -5.0)
+    //   kierunek = true;
+
+    // if(czyJestSila(actualForces))
+    //   anyForce = true;
+    /////////////////////////////////////////
+
+    // Sprawdzam czy otrzymuje dene z czujnika
     if((now - lastHexTime) >= ros::Duration(maxTimeWithoutHex))
     {
       ROS_WARN("No connection with HEX!");
       resetForces();
     }
     
+    // Sprawdzam czy otrzymuje dane o aktualnej pozycji punktu TCP robota
     if((now - lastActualPoseTime) >= ros::Duration(maxTimeWithoutActualPosition))
     {
       ROS_WARN("No connection with robot!");
       iHaveActualPose = false;
     }      
 
-    if(moveIsDone)
-    {
-      if(iHaveActualPose && anyForce)
-      {   
-        findTransformToNextPosition(actualForces);
-        if(calculateGlobalTargetPosition())
-        {
-          moveIsDone = false;
-          nextPoseAccepted = false; 
-          messege = prepareMessege(nextPose);
-          messegeExist=true;
-        }
-      }
-    }
-    else
-    {
-      if(!nextPoseAccepted)
-      {
-        if((now  - messege.header.stamp) > ros::Duration(maxTimeWithoutAcceptation) ) //sprawdza czy minelo 0.5s od wyslania wiadomosci do przyjecia
-        {
-          ROS_ERROR("Next pose not accepted!");
-          return(0);
-        }
-      }
-      anyForce = false;
+    // Jesli odebrano chociaz raz informacje o aktualnej pozycji to licze nowa pozycje 
+    if(iHaveActualPose)
+    {    
+      findTransformToNextPosition(actualForces);
+      if(calculateGlobalTargetPosition())
+        nextPoseExist = true;  
     }
 
+    // Jesli nowa pozycja istnieje, poprzedni ruch zostal wykonany, oraz czujnik wykrywa jakakolwiek sile to przygotowuje nowa wiadomosc
+    if(nextPoseExist && moveIsDone && anyForce)
+    { 
+      messege = prepareMessege(nextPose);
+      messegeExist=true;
+      moveIsDone = false;
+      nextPoseAccepted = false; 
+    }
+
+    // Jesli przez 0.5s od wygenerowania wiadomosci nie dostano informacji o akceptacji nowej pozycji przez robota to wyswietla blad oraz przerywa dzialanie programu
+    if(!nextPoseAccepted)
+    {
+      if((now  - messege.header.stamp) > ros::Duration(maxTimeWithoutAcceptation))
+      {
+        ROS_ERROR("Next pose not accepted!");
+        //return(0);
+      }     
+    }
+
+    // Jesli przygotowano jakakolwiek wiadomosc to ja publikuj
     if(messegeExist)
       sterowanie.publish(messege);
+    
+    // zabezpieczenie aby korzystac zawsze z aktualnych danych z czujnika
+    anyForce = false;
 
+    // Uruchomienie funkcji obslugi odbierania danych oraz oczekiwanie w celu zachowania stalej czestatliwosci
     ros::spinOnce();
     loop_rate.sleep();
 
