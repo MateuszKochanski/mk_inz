@@ -136,14 +136,7 @@ static void ShowResponse(Response r)
 //////////////////////////////////////////////////////////////////////////____________
 geometry_msgs::Wrench Wyodrebnij(Response r)
 {
-    geometry_msgs::Wrench pomiar;/*
-    pomiar.force.x = 1;//r.fx / FORCE_DIV;
-    pomiar.force.y = 2;//r.fy / FORCE_DIV;
-    pomiar.force.z = 3;//r.fz / FORCE_DIV;
-    pomiar.torque.x = 4;//r.tx / TORQUE_DIV;
-    pomiar.torque.y = 5;//r.ty / TORQUE_DIV;
-    pomiar.torque.z = 6;//r.tz / TORQUE_DIV;
-*/
+    geometry_msgs::Wrench pomiar;
 	    
 	pomiar.force.x = r.fx / FORCE_DIV;
     pomiar.force.y = r.fy / FORCE_DIV;
@@ -202,7 +195,7 @@ int main ( int argc, char ** argv )
 			////////////////////////////////////////////////////////////////////////////______________
 			pomiar = Wyodrebnij(r);
 			signal.publish(pomiar);
-			ROS_INFO("test");
+			
 		}while(r.sampleCounter < (SAMPLE_COUNT - 1));
 
 	}

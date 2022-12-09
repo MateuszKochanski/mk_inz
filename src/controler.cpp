@@ -61,9 +61,9 @@ void findTransformToNextPosition(geometry_msgs::Wrench forces)
 
   static tf::TransformBroadcaster br;
   double progF = 0.5;
-  double progT = 0.5;
+  double progT = 0.1;
   double scale = 0.01;
-  double aScale = 0.00;
+  double aScale = 1.5;
   double x, y, z, rx, ry, rz;
 
   tf::Quaternion angleTransform;
@@ -72,12 +72,12 @@ void findTransformToNextPosition(geometry_msgs::Wrench forces)
   y = cutValue(forces.force.y, progF, scale);
   z = cutValue(forces.force.z, 0.7, scale);
 
-  fprintf(stdout,"Fx: %.2f N Fy: %.2f N Fz: %.2f N dx: %.4f m dy: %.4f m dz: %.4f m\r\n",
-    actualForces.force.x, actualForces.force.y, actualForces.force.z, x, y, z);
-
-  rx = cutValue(forces.torque.x, progT, aScale);
-  ry = cutValue(forces.torque.y, progT, aScale);
+  rx = cutValue(forces.torque.x, progT, 0);
+  ry = cutValue(forces.torque.y, progT, 0);
   rz = cutValue(forces.torque.z, progT, aScale);
+
+  fprintf(stdout,"Fx: %.2f N Fy: %.2f N Fz: %.2f N Tz: %.2f dx: %.4f m dy: %.4f m dz: %.4f drz: %.4f rad\r\n",
+    actualForces.force.x, actualForces.force.y, actualForces.force.z, actualForces.torque.z, x, y, z, rz);
 
   angleTransform.setRPY(rx, ry, rz);
   // tf::Transform transform(angleTransform, tf::Vector3(x, y, z));
@@ -100,7 +100,6 @@ bool calculateGlobalTargetPosition()
   
   try
   {
-    ros::Time now = ros::Time::now();
     listener.lookupTransform("base","tmp",ros::Time(0), stampedTransform);
     tf::Transform transform;
     transform.setOrigin(stampedTransform.getOrigin());
@@ -114,15 +113,22 @@ bool calculateGlobalTargetPosition()
     tf::Matrix3x3 m(transform.getRotation());
     double roll, pitch, yaw;
     m.getEulerYPR(yaw, pitch, roll);
+    
 
     yaw = yaw*(180.0/3.14);
     pitch = pitch*(180.0/3.14);
     roll = roll*(180.0/3.14);
 
-    nextPose.orientation.x = yaw;
+    //ROS_INFO("%2f", roll);
+
+    //yaw obrot w osi z
+    //pitch obrot w y
+    //roll obrot w x
+
+    nextPose.orientation.x = yaw; 
     nextPose.orientation.y = pitch;
     nextPose.orientation.z = roll;
-    //ROS_INFO("%2f, %2f, %2f", yaw, pitch, roll);
+    ROS_INFO("%2f, %2f, %2f", yaw, pitch, roll);
 
     nextPose.position.x = transform.getOrigin().getX();
     nextPose.position.y = transform.getOrigin().getY();
