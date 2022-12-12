@@ -123,8 +123,8 @@ include
 add_executable(hex src/hex.cpp)
 target_link_libraries(hex ${catkin_LIBRARIES})
 
-add_executable(controler src/controler.cpp)
-target_link_libraries(controler ${catkin_LIBRARIES})
+add_executable(controller src/controller.cpp)
+target_link_libraries(controller ${catkin_LIBRARIES})
 
 
 ## Declare a C++ library

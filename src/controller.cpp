@@ -224,7 +224,7 @@ geometry_msgs::PoseStamped prepareMessege(geometry_msgs::Pose pose)
 
 int main(int argc, char **argv)
 {
-  ros::init(argc, argv, "forceControler");
+  ros::init(argc, argv, "forceController");
   ros::NodeHandle n;
 
   ros::Subscriber hex = n.subscribe("hex", 10, chatterCallback);
@@ -268,7 +268,10 @@ int main(int argc, char **argv)
     // if(czyJestSila(actualForces))
     //   anyForce = true;
     /////////////////////////////////////////
-
+  //
+//export ROS_IP=10.42.0.100
+//export ROS_MASTER_URI=http://10.42.0.1:11311
+  //
     // Sprawdzam czy otrzymuje dene z czujnika
     if((now - lastHexTime) >= ros::Duration(maxTimeWithoutHex))
     {

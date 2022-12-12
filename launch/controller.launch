@@ -1,0 +1,5 @@
+<launch>
+    <node pkg="mk_inz" type="hex" name="hex"/>
+    <node pkg="mk_inz" type="controller" name="controller"/>
+    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find mk_inz)/rviz/config.rviz"/>
+</launch>

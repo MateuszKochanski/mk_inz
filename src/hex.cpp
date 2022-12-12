@@ -13,7 +13,6 @@ typedef int SOCKET_HANDLE;
 #include <stdlib.h>
 
 #define PORT			49152	/* Port the Ethernet DAQ always uses */
-#define SAMPLE_COUNT	100		/* 10 incoming samples */
 #define SPEED			100		/* 1000 / SPEED = Speed in Hz */
 #define FILTER			6		/* 0 = No filter; 1 = 500 Hz; 2 = 150 Hz; 3 = 50 Hz; 4 = 15 Hz; 5 = 5 Hz; 6 = 1.5 Hz */
 #define BIASING_ON		0xFF    /* Biasing on */
@@ -35,6 +34,8 @@ typedef unsigned short uint16;
 typedef short int16;
 typedef unsigned char byte;
 
+
+
 struct Response {
 	unsigned int sequenceNumber;    
 	unsigned int sampleCounter;  
@@ -47,29 +48,51 @@ struct Response {
 	int32 tz;
 };
 
-
-class Comunicator
+class Communication
 {
-	
+	SOCKET_HANDLE socketHandle;
+	Response r;
+
+	void mySleep(unsigned long ms);
+	int Connect(const char * ipAddress, uint16 port);
+	void showResponse(Response r);
+	void sendCommand(uint16 command, uint32 data);
+	void showResponce();
+
+	public:
+
+	Communication();
+	~Communication();
+	bool receive();
+	void prepare();
+	void start();
+	void stop();
+	geometry_msgs::Wrench getForce();
 };
 
-
-/* Sleep ms milliseconds */
-static void MySleep(unsigned long ms)
+Communication::Communication()
 {
-	usleep(ms * 1000);
+	fprintf( stderr, "Usage: IPADDRESS: 10.42.0.50\n" );
+
+	if (Connect("10.42.0.50", PORT) != 0) {
+		fprintf(stderr, "Could not connect to device...");
+	}
 }
 
+Communication::~Communication()
+{
+	close(socketHandle);
+}
 
-static int Connect(SOCKET_HANDLE * handle, const char * ipAddress, uint16 port)
+int Communication::Connect(const char * ipAddress, uint16 port)
 {
 	struct sockaddr_in addr;	
 	struct hostent *he;	
 	int err;
 
-	*handle = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	socketHandle = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 
-	if (*handle == -1) { 
+	if (socketHandle == -1) { 
 		fprintf(stderr, "Socket could not be opened.\n");
 		return -2;
 	}
@@ -78,55 +101,85 @@ static int Connect(SOCKET_HANDLE * handle, const char * ipAddress, uint16 port)
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(port);
 	
-	err = connect(*handle, (struct sockaddr *)&addr, sizeof(addr));
+	err = connect(socketHandle, (struct sockaddr *)&addr, sizeof(addr));
 	if (err < 0) {
 		return -3;
 	}
 	return 0;
 }
 
-static void Close(SOCKET_HANDLE * handle)
-{
-	close(*handle);
-}
-
-static void SendCommand(SOCKET_HANDLE *socket, uint16 command, uint32 data)
+void Communication::sendCommand(uint16 command, uint32 data)
 {
 	byte request[8];
 	*(uint16*)&request[0] = htons(0x1234); 
 	*(uint16*)&request[2] = htons(command); 
 	*(uint32*)&request[4] = htonl(data); 
-	send(*socket, (const char *)request, 8, 0);
-	MySleep(5); // Wait a little just to make sure that the command has been processed by Ethernet DAQ
+	send(socketHandle, (const char *)request, 8, 0);
+	mySleep(5); // Wait a little just to make sure that the command has been processed by Ethernet DAQ
 }
 
+void Communication::mySleep(unsigned long ms)
+{
+	usleep(ms * 1000);
+}
 
-static Response Receive(SOCKET_HANDLE *socket)
+bool Communication::receive()
 {
 	byte inBuffer[36];
-	Response response;
 	unsigned int uItems = 0;
-	int size = recv(*socket, (char *)inBuffer, 36, MSG_DONTWAIT);
+	int size = recv(socketHandle, (char *)inBuffer, 36, MSG_DONTWAIT);
 	
 	if (size == 36)
 	{
-		response.sequenceNumber = ntohl(*(uint32*)&inBuffer[0]);
-		response.sampleCounter = ntohl(*(uint32*)&inBuffer[4]);
-		response.status = ntohl(*(uint32*)&inBuffer[8]);
-		response.fx = (ntohl(*(int32*)&inBuffer[12 + (uItems++) * 4]));
-		response.fy = (ntohl(*(int32*)&inBuffer[12 + (uItems++) * 4])); 
-		response.fz = (ntohl(*(int32*)&inBuffer[12 + (uItems++) * 4]));
-		response.tx = (ntohl(*(int32*)&inBuffer[12 + (uItems++) * 4]));
-		response.ty = (ntohl(*(int32*)&inBuffer[12 + (uItems++) * 4]));
-		response.tz = (ntohl(*(int32*)&inBuffer[12 + (uItems++) * 4]));
-		return response;
+		r.sequenceNumber = ntohl(*(uint32*)&inBuffer[0]);
+		r.sampleCounter = ntohl(*(uint32*)&inBuffer[4]);
+		r.status = ntohl(*(uint32*)&inBuffer[8]);
+		r.fx = (ntohl(*(int32*)&inBuffer[12 + (uItems++) * 4]));
+		r.fy = (ntohl(*(int32*)&inBuffer[12 + (uItems++) * 4])); 
+		r.fz = (ntohl(*(int32*)&inBuffer[12 + (uItems++) * 4]));
+		r.tx = (ntohl(*(int32*)&inBuffer[12 + (uItems++) * 4]));
+		r.ty = (ntohl(*(int32*)&inBuffer[12 + (uItems++) * 4]));
+		r.tz = (ntohl(*(int32*)&inBuffer[12 + (uItems++) * 4]));
+		return true;
 	}
-	
+	else
+		return false;
+}
+
+geometry_msgs::Wrench Communication::getForce()
+{
+    geometry_msgs::Wrench pomiar;
+	    
+	pomiar.force.x = r.fx / FORCE_DIV;
+    pomiar.force.y = r.fy / FORCE_DIV;
+    pomiar.force.z = r.fz / FORCE_DIV;
+    pomiar.torque.x = r.tx / TORQUE_DIV;
+    pomiar.torque.y = r.ty / TORQUE_DIV;
+    pomiar.torque.z = r.tz / TORQUE_DIV;
+
+    return pomiar;
+}
+
+void Communication::prepare()
+{
+	sendCommand(COMMAND_SPEED, SPEED);
+	sendCommand(COMMAND_FILTER, FILTER);
+	sendCommand(COMMAND_BIAS, BIASING_OFF);
+	sendCommand(COMMAND_BIAS, BIASING_ON);//zerowanie
+}
+
+void Communication::start()
+{
+	sendCommand(COMMAND_START, 0);
+}
+
+void Communication::stop()
+{
+	sendCommand(COMMAND_STOP, 0);
 }
 
 
-
-static void ShowResponse(Response r)
+void Communication::showResponce()
 {
 	double fx = r.fx / FORCE_DIV;
 	double fy = r.fy / FORCE_DIV;
@@ -139,22 +192,9 @@ static void ShowResponse(Response r)
 
 	fflush(stdout);
 }
-//////////////////////////////////////////////////////////////////////////____________
-geometry_msgs::Wrench Wyodrebnij(Response r)
-{
-    geometry_msgs::Wrench pomiar;
-	    
-	pomiar.force.x = r.fx / FORCE_DIV;
-    pomiar.force.y = r.fy / FORCE_DIV;
-    pomiar.force.z = r.fz / FORCE_DIV;
-    pomiar.torque.x = r.tx / TORQUE_DIV;
-    pomiar.torque.y = r.ty / TORQUE_DIV;
-    pomiar.torque.z = r.tz / TORQUE_DIV;
 
-    return pomiar;
-}//////////////////////////////////////////////////////////////////////////
 
-void ResetForces(geometry_msgs::Wrench &pom)
+void ResetForce(geometry_msgs::Wrench &pom)
 {
     pom.force.y = 0;
 	pom.force.x = 0;
@@ -167,40 +207,28 @@ void ResetForces(geometry_msgs::Wrench &pom)
 
 int main ( int argc, char ** argv ) 
 {
-	////////////////////////////////////////////////////////////////////////___________
 	ros::init(argc, argv, "signal");
 	ros::NodeHandle m;
 	ros::Publisher signal = m.advertise<geometry_msgs::Wrench>("hex",1000);
+
 	geometry_msgs::Wrench pomiar;
-	/////////////////////////////////////////////////////////////////////
-	Response r;
-	SOCKET_HANDLE socketHandle;		/* Handle to UDP socket used to communicate with Ethernet DAQ. */
+	ResetForce(pomiar);
+
+	Communication com;
 	
-	fprintf( stderr, "Usage: IPADDRESS: 10.42.0.50\n" );
-
-	ResetForces(pomiar);
-
-
-	if (Connect(&socketHandle, "10.42.0.50", PORT) != 0) {
-		fprintf(stderr, "Could not connect to device...");
-		return -1;
-	}
-	SendCommand(&socketHandle, COMMAND_SPEED, SPEED);
-	SendCommand(&socketHandle, COMMAND_FILTER, FILTER);
-	SendCommand(&socketHandle, COMMAND_BIAS, BIASING_OFF);
-	//SendCommand(&socketHandle, COMMAND_START, SAMPLE_COUNT);
-	SendCommand(&socketHandle, COMMAND_BIAS, BIASING_ON);//zerowanie
+	com.prepare();
+	com.start();
 	
-	SendCommand(&socketHandle, COMMAND_START, SAMPLE_COUNT);
 	while (ros::ok())
 	{	
-		r = Receive(&socketHandle);
-		ShowResponse(r);
-		pomiar = Wyodrebnij(r);
-		signal.publish(pomiar);
+		if(com.receive())
+		{
+			pomiar = com.getForce();
+			signal.publish(pomiar);
+		}	
 	}
-	SendCommand(&socketHandle, COMMAND_STOP, SAMPLE_COUNT);
 
-	Close(&socketHandle);
+	com.stop();
+
 	return 0;
 }
