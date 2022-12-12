@@ -25,23 +25,17 @@ typedef int SOCKET_HANDLE;
 #define COMMAND_FILTER	0x0081  /* Command for setting filter */
 #define COMMAND_SPEED	0x0082  /* Command for setting speed */
 
+#define	FORCE_DIV	10000.0  // Default divide value
+#define	TORQUE_DIV	100000.0 // Default divide value
 
-#define		UNIT  1 // 0 - Dimensionless  | 1 - Newton/Newton-meter
-
-#if UNIT == 1
-#define		FORCE_DIV	10000.0  // Default divide value
-#define		TORQUE_DIV	100000.0 // Default divide value
-#else
-#define FORCE_DIV	1.0
-#define TORQUE_DIV	1.0
-#endif
 
 typedef unsigned int uint32;
 typedef int int32;
 typedef unsigned short uint16;
 typedef short int16;
 typedef unsigned char byte;
-typedef struct ResponseStruct {
+
+struct Response {
 	unsigned int sequenceNumber;    
 	unsigned int sampleCounter;  
  	unsigned int status;		
@@ -51,7 +45,14 @@ typedef struct ResponseStruct {
 	int32 tx;
 	int32 ty;
 	int32 tz;
-} Response;
+};
+
+
+class Comunicator
+{
+	
+};
+
 
 /* Sleep ms milliseconds */
 static void MySleep(unsigned long ms)
@@ -105,18 +106,25 @@ static Response Receive(SOCKET_HANDLE *socket)
 	byte inBuffer[36];
 	Response response;
 	unsigned int uItems = 0;
-	recv(*socket, (char *)inBuffer, 36, 0 );
-	response.sequenceNumber = ntohl(*(uint32*)&inBuffer[0]);
-	response.sampleCounter = ntohl(*(uint32*)&inBuffer[4]);
-	response.status = ntohl(*(uint32*)&inBuffer[8]);
-	response.fx = (ntohl(*(int32*)&inBuffer[12 + (uItems++) * 4]));
-	response.fy = (ntohl(*(int32*)&inBuffer[12 + (uItems++) * 4])); 
-	response.fz = (ntohl(*(int32*)&inBuffer[12 + (uItems++) * 4]));
-	response.tx = (ntohl(*(int32*)&inBuffer[12 + (uItems++) * 4]));
-	response.ty = (ntohl(*(int32*)&inBuffer[12 + (uItems++) * 4]));
-	response.tz = (ntohl(*(int32*)&inBuffer[12 + (uItems++) * 4]));
-	return response;
+	int size = recv(*socket, (char *)inBuffer, 36, MSG_DONTWAIT);
+	
+	if (size == 36)
+	{
+		response.sequenceNumber = ntohl(*(uint32*)&inBuffer[0]);
+		response.sampleCounter = ntohl(*(uint32*)&inBuffer[4]);
+		response.status = ntohl(*(uint32*)&inBuffer[8]);
+		response.fx = (ntohl(*(int32*)&inBuffer[12 + (uItems++) * 4]));
+		response.fy = (ntohl(*(int32*)&inBuffer[12 + (uItems++) * 4])); 
+		response.fz = (ntohl(*(int32*)&inBuffer[12 + (uItems++) * 4]));
+		response.tx = (ntohl(*(int32*)&inBuffer[12 + (uItems++) * 4]));
+		response.ty = (ntohl(*(int32*)&inBuffer[12 + (uItems++) * 4]));
+		response.tz = (ntohl(*(int32*)&inBuffer[12 + (uItems++) * 4]));
+		return response;
+	}
+	
 }
+
+
 
 static void ShowResponse(Response r)
 {
@@ -126,11 +134,9 @@ static void ShowResponse(Response r)
 	double tx = r.tx / TORQUE_DIV;
 	double ty = r.ty / TORQUE_DIV;
 	double tz = r.tz / TORQUE_DIV;
-#if UNIT == 1
+	
 	fprintf(stdout, "S:%u SN: %u SC: %u Fx: %.2f N Fy: %.2f N Fz: %.2f N Tx: %.2f Nm Ty: %.2f Nm Tz: %.2f Nm\r\n", r.status, r.sequenceNumber, r.sampleCounter, fx, fy, fz, tx, ty, tz);
-#else 
-	fprintf(stdout, "S:%u SN: %u SC: %u Fx: %.2f Fy: %.2f Fz: %.2f Tx: %.2f Ty: %.2f Tz: %.2f\r\n", r.status, r.sequenceNumber, r.sampleCounter, fx, fy, fz, tx, ty, tz);
-#endif
+
 	fflush(stdout);
 }
 //////////////////////////////////////////////////////////////////////////____________
@@ -148,6 +154,17 @@ geometry_msgs::Wrench Wyodrebnij(Response r)
     return pomiar;
 }//////////////////////////////////////////////////////////////////////////
 
+void ResetForces(geometry_msgs::Wrench &pom)
+{
+    pom.force.y = 0;
+	pom.force.x = 0;
+	pom.force.z = 0;
+    pom.torque.x = 0;
+    pom.torque.y = 0;
+    pom.torque.z = 0;
+}
+
+
 int main ( int argc, char ** argv ) 
 {
 	////////////////////////////////////////////////////////////////////////___________
@@ -161,6 +178,8 @@ int main ( int argc, char ** argv )
 	
 	fprintf( stderr, "Usage: IPADDRESS: 10.42.0.50\n" );
 
+	ResetForces(pomiar);
+
 
 	if (Connect(&socketHandle, "10.42.0.50", PORT) != 0) {
 		fprintf(stderr, "Could not connect to device...");
@@ -171,34 +190,17 @@ int main ( int argc, char ** argv )
 	SendCommand(&socketHandle, COMMAND_BIAS, BIASING_OFF);
 	//SendCommand(&socketHandle, COMMAND_START, SAMPLE_COUNT);
 	SendCommand(&socketHandle, COMMAND_BIAS, BIASING_ON);//zerowanie
-
+	
+	SendCommand(&socketHandle, COMMAND_START, SAMPLE_COUNT);
 	while (ros::ok())
 	{	
-		SendCommand(&socketHandle, COMMAND_START, SAMPLE_COUNT);
-		// for (int i = 0; i < SAMPLE_COUNT; i++)
-		// {
-			
-		// 	r = Receive(&socketHandle);
-		// 	ShowResponse(r);
-		// 	////////////////////////////////////////////////////////////////////////////______________
-		// 	pomiar = Wyodrebnij(r);
-		// 	signal.publish(pomiar);
-		// 	ROS_INFO("test");
-		// 	////////////////////////////////////////////////////////////////////////////////
-		// }	
-
-		do
-		{
-
-			r = Receive(&socketHandle);
-			ShowResponse(r);
-			////////////////////////////////////////////////////////////////////////////______________
-			pomiar = Wyodrebnij(r);
-			signal.publish(pomiar);
-			
-		}while(r.sampleCounter < (SAMPLE_COUNT - 1));
-
+		r = Receive(&socketHandle);
+		ShowResponse(r);
+		pomiar = Wyodrebnij(r);
+		signal.publish(pomiar);
 	}
+	SendCommand(&socketHandle, COMMAND_STOP, SAMPLE_COUNT);
+
 	Close(&socketHandle);
 	return 0;
 }
