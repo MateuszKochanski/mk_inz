@@ -5,37 +5,21 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <unistd.h>
-typedef int SOCKET_HANDLE;
 
 #include <sys/types.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-#define PORT			49152	/* Port the Ethernet DAQ always uses */
-#define SPEED			100		/* 1000 / SPEED = Speed in Hz */
-#define FILTER			6		/* 0 = No filter; 1 = 500 Hz; 2 = 150 Hz; 3 = 50 Hz; 4 = 15 Hz; 5 = 5 Hz; 6 = 1.5 Hz */
-#define BIASING_ON		0xFF    /* Biasing on */
-#define BIASING_OFF		0x00    /* Biasing off */
 
-#define COMMAND_START	0x0002  /* Command for start streaming */
-#define COMMAND_STOP	0x0000  /* Command for stop streaming */
-#define COMMAND_BIAS	0x0042  /* Command for toggle biasing */
-#define COMMAND_FILTER	0x0081  /* Command for setting filter */
-#define COMMAND_SPEED	0x0082  /* Command for setting speed */
-
-#define	FORCE_DIV	10000.0  // Default divide value
-#define	TORQUE_DIV	100000.0 // Default divide value
-
-
+typedef int SOCKET_HANDLE;
 typedef unsigned int uint32;
 typedef int int32;
 typedef unsigned short uint16;
 typedef short int16;
 typedef unsigned char byte;
 
-
-
+//struktura udbieranych wiadomosci
 struct Response {
 	unsigned int sequenceNumber;    
 	unsigned int sampleCounter;  
@@ -50,41 +34,73 @@ struct Response {
 
 class Communication
 {
+	
+	const int command_start = 0x0002;	//komenda rozpoczecia wysylania danych 
+	const int command_stop = 0x0000;	//komenda zakonczenia wysylania dancych
+	const int command_bias = 0x0042;	//komenda zerowania
+	const int command_filter = 0x0081;	//komenda ustawienia filtra
+	const int command_speed = 0x0082;	//komenda ustawienia predkosci wysylania danych
+	const int port = 49152;				//Port do komunikacji Ethernet
+
+	const int biasing_on = 0xFF;
+	const int biasing_off = 0x00;
+
+	bool connected = false;				//Czy polaczono sie z urzadzeniem
+	bool transmit = false;				//Czy czujnik ma wysylac dane
+
 	SOCKET_HANDLE socketHandle;
 	Response r;
+	ros::Time lastReceiveTime;
 
-	void mySleep(unsigned long ms);
-	int Connect(const char * ipAddress, uint16 port);
+	int speed;  //1000 / SPEED = Speed in Hz 
+	int filter; //0 = No filter; 1 = 500 Hz; 2 = 150 Hz; 3 = 50 Hz; 4 = 15 Hz; 5 = 5 Hz; 6 = 1.5 Hz 
+
+	int Connect(const char * ipAddress);
 	void showResponse(Response r);
 	void sendCommand(uint16 command, uint32 data);
 	void showResponce();
+	void prepare();
+	void reconnect();
 
 	public:
 
-	Communication();
+	Communication(int Speed = 100, int Filter = 6);
 	~Communication();
 	bool receive();
-	void prepare();
 	void start();
 	void stop();
 	geometry_msgs::Wrench getForce();
 };
 
-Communication::Communication()
+//konstruktor proboje sie polaczyc z urzadzeniem, jesli sie uda wysyla komendy konfiguracyjne
+Communication::Communication(int Speed, int Filter)
 {
 	fprintf( stderr, "Usage: IPADDRESS: 10.42.0.50\n" );
 
-	if (Connect("10.42.0.50", PORT) != 0) {
-		fprintf(stderr, "Could not connect to device...");
+	speed = Speed;
+	filter = Filter;
+	lastReceiveTime = ros::Time::now();
+	
+	if (Connect("10.42.0.50") != 0) 
+	{
+		ROS_INFO("No connection");
+		connected = false;
+	}
+	else
+	{
+		prepare();
+		connected = true;
 	}
 }
 
+//destruktor, konczy komunikacje 
 Communication::~Communication()
 {
 	close(socketHandle);
 }
 
-int Communication::Connect(const char * ipAddress, uint16 port)
+//laczy z urzadzeniem
+int Communication::Connect(const char * ipAddress)
 {
 	struct sockaddr_in addr;	
 	struct hostent *he;	
@@ -108,6 +124,7 @@ int Communication::Connect(const char * ipAddress, uint16 port)
 	return 0;
 }
 
+//wysyla pojedyncza komende
 void Communication::sendCommand(uint16 command, uint32 data)
 {
 	byte request[8];
@@ -115,22 +132,54 @@ void Communication::sendCommand(uint16 command, uint32 data)
 	*(uint16*)&request[2] = htons(command); 
 	*(uint32*)&request[4] = htonl(data); 
 	send(socketHandle, (const char *)request, 8, 0);
-	mySleep(5); // Wait a little just to make sure that the command has been processed by Ethernet DAQ
+	usleep(5000);
 }
 
-void Communication::mySleep(unsigned long ms)
+//proboje sie ponownie polaczyc z urzadzeniem, jesli sie uda wysyla komendy konfiguracyjne
+void Communication::reconnect()
 {
-	usleep(ms * 1000);
+	ROS_INFO("Reconnect");
+	lastReceiveTime = ros::Time::now();
+
+	close(socketHandle);
+
+	if (Connect("10.42.0.50") != 0) 
+	{
+		ROS_INFO("No connection");
+		connected = false;
+	}
+	else
+	{
+		prepare();
+
+		if(transmit)
+			sendCommand(command_start, 0);
+
+		connected = true;
+	}
 }
 
+//odbieranie wiadomosci, jesli nie jest polaczony to proboje polaczyc ponownie
 bool Communication::receive()
 {
+	//jezeli nie jest polaczone to sproboj polaczyc ponownie
+	if(!connected)
+	{
+		reconnect();
+		return false;
+	}
+
+	//jezeli nie rozpoczeto transmisji danych to przerwij
+	if(!transmit)
+		return false;
+
 	byte inBuffer[36];
 	unsigned int uItems = 0;
 	int size = recv(socketHandle, (char *)inBuffer, 36, MSG_DONTWAIT);
-	
+
 	if (size == 36)
 	{
+		lastReceiveTime = ros::Time::now();
 		r.sequenceNumber = ntohl(*(uint32*)&inBuffer[0]);
 		r.sampleCounter = ntohl(*(uint32*)&inBuffer[4]);
 		r.status = ntohl(*(uint32*)&inBuffer[8]);
@@ -143,50 +192,69 @@ bool Communication::receive()
 		return true;
 	}
 	else
+	{
+		if((ros::Time::now() - lastReceiveTime) >= ros::Duration(5.0))
+			connected = false;
+		
 		return false;
+	}
+		
+	
 }
 
+//funkcja zwracajaca wartosci otrzymane w wiadomosci
 geometry_msgs::Wrench Communication::getForce()
 {
+	static double force_div = 10000.0;
+	static double torque_div = 100000.0;
+
     geometry_msgs::Wrench pomiar;
 	    
-	pomiar.force.x = r.fx / FORCE_DIV;
-    pomiar.force.y = r.fy / FORCE_DIV;
-    pomiar.force.z = r.fz / FORCE_DIV;
-    pomiar.torque.x = r.tx / TORQUE_DIV;
-    pomiar.torque.y = r.ty / TORQUE_DIV;
-    pomiar.torque.z = r.tz / TORQUE_DIV;
+	pomiar.force.x = r.fx / force_div;
+    pomiar.force.y = r.fy / force_div;
+    pomiar.force.z = r.fz / force_div;
+    pomiar.torque.x = r.tx / torque_div;
+    pomiar.torque.y = r.ty / torque_div;
+    pomiar.torque.z = r.tz / torque_div;
 
     return pomiar;
 }
 
+//wyslanie komend z ustawieniami predkosci i filtra oraz zerowanie czujnika
 void Communication::prepare()
 {
-	sendCommand(COMMAND_SPEED, SPEED);
-	sendCommand(COMMAND_FILTER, FILTER);
-	sendCommand(COMMAND_BIAS, BIASING_OFF);
-	sendCommand(COMMAND_BIAS, BIASING_ON);//zerowanie
+	sendCommand(command_speed, speed);
+	sendCommand(command_filter, filter);
+	sendCommand(command_bias, biasing_off);
+	sendCommand(command_bias, biasing_on);
 }
 
+//wyslanie komendy rozpoczecia wykonywania pomiarow
 void Communication::start()
 {
-	sendCommand(COMMAND_START, 0);
+	sendCommand(command_start, 0);
+	transmit = false;
 }
 
+//wyslanie komendy zaprzestania wykonywania pomiarow
 void Communication::stop()
 {
-	sendCommand(COMMAND_STOP, 0);
+	sendCommand(command_stop, 0);
+	transmit = false;
 }
 
-
+//wyswietlanie odebranych danych
 void Communication::showResponce()
 {
-	double fx = r.fx / FORCE_DIV;
-	double fy = r.fy / FORCE_DIV;
-	double fz = r.fz / FORCE_DIV;
-	double tx = r.tx / TORQUE_DIV;
-	double ty = r.ty / TORQUE_DIV;
-	double tz = r.tz / TORQUE_DIV;
+	static double force_div = 10000.0;
+	static double torque_div = 100000.0;
+
+	double fx = r.fx / force_div;
+	double fy = r.fy / force_div;
+	double fz = r.fz / force_div;
+	double tx = r.tx / torque_div;
+	double ty = r.ty / torque_div;
+	double tz = r.tz / torque_div;
 	
 	fprintf(stdout, "S:%u SN: %u SC: %u Fx: %.2f N Fy: %.2f N Fz: %.2f N Tx: %.2f Nm Ty: %.2f Nm Tz: %.2f Nm\r\n", r.status, r.sequenceNumber, r.sampleCounter, fx, fy, fz, tx, ty, tz);
 
@@ -194,6 +262,7 @@ void Communication::showResponce()
 }
 
 
+//zeroje wszystkie wartosci sil i momentow
 void ResetForce(geometry_msgs::Wrench &pom)
 {
     pom.force.y = 0;
@@ -216,16 +285,20 @@ int main ( int argc, char ** argv )
 
 	Communication com;
 	
-	com.prepare();
+	
 	com.start();
 	
+	ros::Rate loop_rate(1000); 
 	while (ros::ok())
 	{	
+		//odebranie danych
 		if(com.receive())
 		{
+			//jezeli odebrano dane to je pobierz i opublikuj na kanale "hex"
 			pomiar = com.getForce();
 			signal.publish(pomiar);
 		}	
+		loop_rate.sleep();
 	}
 
 	com.stop();

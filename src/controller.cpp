@@ -12,7 +12,7 @@ ros::Publisher sterowanie;
 geometry_msgs::Pose nextPose;
 geometry_msgs::Wrench actualForces;
 geometry_msgs::PoseStamped messege;
-int loopRate = 100;
+const int loopRate = 100;
 bool iHaveActualPose = false;
 bool moveIsDone = true;
 bool anyForce = false;
@@ -21,28 +21,16 @@ bool nextPoseAccepted = true;
 ros::Time lastActualPoseTime;
 ros::Time lastHexTime;
 
-double forceValue(geometry_msgs::Wrench hex)
-{
-  return sqrt(pow(hex.force.x, 2) + pow(hex.force.y, 2) + pow(hex.force.z, 2));
-}
-
-bool czySilaPrzekracza(geometry_msgs::Wrench hex, double C)
-{
-  if (abs(hex.force.x) > C || abs(hex.force.y) > C || abs(hex.force.z) > C)
-    return true;
-  else
-    return false;
-}
-
+//sprawdza czy wartosc ktorejs z sil lub momentu przekracza pewien prog
 bool czyJestSila(geometry_msgs::Wrench hex)
 {
-  if(czySilaPrzekracza(hex, 0.5))
+  if(abs(hex.force.x) > 0.5 || abs(hex.force.y) > 0.5 || abs(hex.force.z) > 0.5 || abs(hex.torque.z) > 0.1 )
     return true;
   else
     return false;
 }
 
-
+//Pozbywanie sie zaklocen przy malych wartosciach sil
 double cutValue(double wartosc, double prog, double skala)
 { 
   double wynik;
@@ -56,6 +44,7 @@ double cutValue(double wartosc, double prog, double skala)
   return wynik * skala;
 }
 
+//Obliczenia translacji i rotacji z aktualnej pozycji do nowego punktu
 void findTransformToNextPosition(geometry_msgs::Wrench forces)
 {
 
@@ -80,17 +69,15 @@ void findTransformToNextPosition(geometry_msgs::Wrench forces)
     actualForces.force.x, actualForces.force.y, actualForces.force.z, actualForces.torque.z, x, y, z, rz);
 
   angleTransform.setRPY(rx, ry, rz);
-  // tf::Transform transform(angleTransform, tf::Vector3(x, y, z));
+
   tf::Transform transform(angleTransform, tf::Vector3(-y, x, z));
 
   br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "TCP", "tmp"));
 }
 
-
+//Obliczanie polorzenia i orientacji nastepnego punktu
 bool calculateGlobalTargetPosition()
 {
-  //geometry_msgs::Pose *nextPosee = nullptr;
-
   bool succed = false;
 
   static tf::TransformListener listener;
@@ -106,29 +93,17 @@ bool calculateGlobalTargetPosition()
     transform.setRotation(stampedTransform.getRotation());
     broadcaster.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "base", "NEXT_TCP"));
 
-    // nextPose.orientation.x = transform.getRotation().getX();
-    // nextPose.orientation.y = transform.getRotation().getY();
-    // nextPose.orientation.z = transform.getRotation().getZ();
-    // nextPose.orientation.w = transform.getRotation().getW();
     tf::Matrix3x3 m(transform.getRotation());
     double roll, pitch, yaw;
     m.getEulerYPR(yaw, pitch, roll);
-    
 
     yaw = yaw*(180.0/3.14);
     pitch = pitch*(180.0/3.14);
     roll = roll*(180.0/3.14);
 
-    //ROS_INFO("%2f", roll);
-
-    //yaw obrot w osi z
-    //pitch obrot w y
-    //roll obrot w x
-
     nextPose.orientation.x = yaw; 
     nextPose.orientation.y = pitch;
     nextPose.orientation.z = roll;
-    ROS_INFO("%2f, %2f, %2f", yaw, pitch, roll);
 
     nextPose.position.x = transform.getOrigin().getX();
     nextPose.position.y = transform.getOrigin().getY();
@@ -144,6 +119,7 @@ bool calculateGlobalTargetPosition()
   return succed;
 }
 
+//wyzerowanie aktualnych wartosci sil i momentow 
 void resetForces()
 {
     actualForces.force.x = 0;
@@ -155,11 +131,10 @@ void resetForces()
     anyForce = false;
 }
 
+//odebranie wiadomosci z czujnika sily i momentu
 void chatterCallback(const geometry_msgs::Wrench& msg)
 {
 
-  // fprintf(stdout,"Fx: %.2f N Fy: %.2f N Fz: %.2f N Tx: %.2f Nm Ty: %.2f Nm Tz: %.2f Nm\r\n",
-  //   msg.force.x, msg.force.y, msg.force.z, msg.torque.x, msg.torque.y, msg.torque.z);
   if(czyJestSila(msg))
   {
     actualForces = msg;
@@ -173,6 +148,7 @@ void chatterCallback(const geometry_msgs::Wrench& msg)
   
 }
 
+//odebranie wiadomosci potwierdzenia odebrania danych oraz wykonania ruchu
 void doneCallback(const std_msgs::Header head)
 {
   if(head.stamp == messege.header.stamp)
@@ -186,6 +162,7 @@ void doneCallback(const std_msgs::Header head)
   }
 }
 
+//Zamiana kwaterionow z geometry_msgs na typ tf
 tf::Quaternion msgToTfDatatype(geometry_msgs::Quaternion msg)
 {
   tf::Quaternion a;
@@ -196,6 +173,7 @@ tf::Quaternion msgToTfDatatype(geometry_msgs::Quaternion msg)
   return a;
 }
 
+//Odebranie wiadomosci o aktualnej pozycji
 void actualTCPposition(const geometry_msgs::Pose& msg)
 {
   static tf::TransformBroadcaster br;
@@ -208,7 +186,7 @@ void actualTCPposition(const geometry_msgs::Pose& msg)
   iHaveActualPose = true;
 }
 
-
+//Przygotowanie wiadomosci zawierajacej nowa pozycje
 geometry_msgs::PoseStamped prepareMessege(geometry_msgs::Pose pose)
 {
   geometry_msgs::PoseStamped msg;
@@ -216,7 +194,6 @@ geometry_msgs::PoseStamped prepareMessege(geometry_msgs::Pose pose)
 
   msg.header.frame_id = "NextPose";
   msg.header.stamp = ros::Time::now();
-  //msg.header.seq = 0;
 
   return msg;
 }
@@ -239,10 +216,6 @@ int main(int argc, char **argv)
 
   lastActualPoseTime = ros::Time::now();
   lastHexTime = ros::Time::now();
-  
-/////////////////////////////////////////////////////Do zakomentowania
-  //bool kierunek = true;
-////////////////////////////////////////////////////
 
   bool nextPoseExist = false;
   bool messegeExist = false;
@@ -254,24 +227,7 @@ int main(int argc, char **argv)
   while (ros::ok())
   {  
     now = ros::Time::now();
-    /////////////////////////////////////////// symulowanie hexa
-    // if(kierunek)
-    //   actualForces.force.z += 1.0/loopRate;
-    // else
-    //   actualForces.force.z -= 1.0/loopRate;
-
-    // if (actualForces.force.z > 5.0)
-    //   kierunek =false;
-    // else if (actualForces.force.z < -5.0)
-    //   kierunek = true;
-
-    // if(czyJestSila(actualForces))
-    //   anyForce = true;
-    /////////////////////////////////////////
-  //
-//export ROS_IP=10.42.0.100
-//export ROS_MASTER_URI=http://10.42.0.1:11311
-  //
+  
     // Sprawdzam czy otrzymuje dene z czujnika
     if((now - lastHexTime) >= ros::Duration(maxTimeWithoutHex))
     {
@@ -309,7 +265,6 @@ int main(int argc, char **argv)
       if((now  - messege.header.stamp) > ros::Duration(maxTimeWithoutAcceptation))
       {
         ROS_ERROR("Next pose not accepted!");
-        //return(0);
       }     
     }
 
