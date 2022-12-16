@@ -22,7 +22,7 @@ ros::Time lastActualPoseTime;
 ros::Time lastHexTime;
 
 //sprawdza czy wartosc ktorejs z sil lub momentu przekracza pewien prog
-bool czyJestSila(geometry_msgs::Wrench hex)
+bool nonzeroForce(geometry_msgs::Wrench hex)
 {
   if(abs(hex.force.x) > 0.5 || abs(hex.force.y) > 0.5 || abs(hex.force.z) > 0.5 || abs(hex.torque.z) > 0.1 )
     return true;
@@ -31,7 +31,7 @@ bool czyJestSila(geometry_msgs::Wrench hex)
 }
 
 //Pozbywanie sie zaklocen przy malych wartosciach sil
-double cutValue(double wartosc, double prog, double skala)
+double cutAndScale(double wartosc, double prog, double skala)
 { 
   double wynik;
   if (wartosc > prog)
@@ -57,13 +57,13 @@ void findTransformToNextPosition(geometry_msgs::Wrench forces)
 
   tf::Quaternion angleTransform;
   
-  x = cutValue(forces.force.x, progF, scale);
-  y = cutValue(forces.force.y, progF, scale);
-  z = cutValue(forces.force.z, 0.7, scale);
+  x = cutAndScale(forces.force.x, progF, scale);
+  y = cutAndScale(forces.force.y, progF, scale);
+  z = cutAndScale(forces.force.z, 0.7, scale);
 
-  rx = cutValue(forces.torque.x, progT, 0);
-  ry = cutValue(forces.torque.y, progT, 0);
-  rz = cutValue(forces.torque.z, progT, aScale);
+  rx = cutAndScale(forces.torque.x, progT, 0);
+  ry = cutAndScale(forces.torque.y, progT, 0);
+  rz = cutAndScale(forces.torque.z, progT, aScale);
 
   fprintf(stdout,"Fx: %.2f N Fy: %.2f N Fz: %.2f N Tz: %.2f dx: %.4f m dy: %.4f m dz: %.4f drz: %.4f rad\r\n",
     actualForces.force.x, actualForces.force.y, actualForces.force.z, actualForces.torque.z, x, y, z, rz);
@@ -76,7 +76,7 @@ void findTransformToNextPosition(geometry_msgs::Wrench forces)
 }
 
 //Obliczanie polorzenia i orientacji nastepnego punktu
-bool calculateGlobalTargetPosition()
+bool calculateNextPositionInGlobalFrame()
 {
   bool succed = false;
 
@@ -131,11 +131,21 @@ void resetForces()
     anyForce = false;
 }
 
-//odebranie wiadomosci z czujnika sily i momentu
-void chatterCallback(const geometry_msgs::Wrench& msg)
+//Zamiana kwaterionow z geometry_msgs na typ tf
+tf::Quaternion msgToTfDatatype(geometry_msgs::Quaternion msg)
 {
+  tf::Quaternion a;
+  a.setX(msg.x);
+  a.setY(msg.y);
+  a.setZ(msg.z);
+  a.setW(msg.w);
+  return a;
+}
 
-  if(czyJestSila(msg))
+//odebranie wiadomosci z czujnika sily i momentu
+void sensorCallback(const geometry_msgs::Wrench& msg)
+{
+  if(nonzeroForce(msg))
   {
     actualForces = msg;
     anyForce = true;
@@ -145,11 +155,10 @@ void chatterCallback(const geometry_msgs::Wrench& msg)
     resetForces();
   } 
   lastHexTime = ros::Time::now();
-  
 }
 
 //odebranie wiadomosci potwierdzenia odebrania danych oraz wykonania ruchu
-void doneCallback(const std_msgs::Header head)
+void feedbackCallback(const std_msgs::Header head)
 {
   if(head.stamp == messege.header.stamp)
   {
@@ -162,19 +171,8 @@ void doneCallback(const std_msgs::Header head)
   }
 }
 
-//Zamiana kwaterionow z geometry_msgs na typ tf
-tf::Quaternion msgToTfDatatype(geometry_msgs::Quaternion msg)
-{
-  tf::Quaternion a;
-  a.setX(msg.x);
-  a.setY(msg.y);
-  a.setZ(msg.z);
-  a.setW(msg.w);
-  return a;
-}
-
 //Odebranie wiadomosci o aktualnej pozycji
-void actualTCPposition(const geometry_msgs::Pose& msg)
+void actualPositionCallback(const geometry_msgs::Pose& msg)
 {
   static tf::TransformBroadcaster br;
   tf::Quaternion a = msgToTfDatatype(msg.orientation);
@@ -204,11 +202,10 @@ int main(int argc, char **argv)
   ros::init(argc, argv, "forceController");
   ros::NodeHandle n;
 
-  ros::Subscriber hex = n.subscribe("hex", 10, chatterCallback);
-  ros::Subscriber TCP = n.subscribe("/es_arm/cartesian_pose", 10, actualTCPposition);
-  ros::Subscriber done = n.subscribe("/es_master/done", 10, doneCallback);
+  ros::Subscriber hex = n.subscribe("hex", 10, sensorCallback);
+  ros::Subscriber TCP = n.subscribe("/es_arm/cartesian_pose", 10, actualPositionCallback);
+  ros::Subscriber done = n.subscribe("/es_master/done", 10, feedbackCallback);
   sterowanie = n.advertise<geometry_msgs::PoseStamped>("sterowanie",1000);
-
 
   const double maxTimeWithoutHex = 0.2;
   const double maxTimeWithoutActualPosition = 0.2;
@@ -246,7 +243,7 @@ int main(int argc, char **argv)
     if(iHaveActualPose)
     {    
       findTransformToNextPosition(actualForces);
-      if(calculateGlobalTargetPosition())
+      if(calculateNextPositionInGlobalFrame())
         nextPoseExist = true;  
     }
 
@@ -278,7 +275,6 @@ int main(int argc, char **argv)
     // Uruchomienie funkcji obslugi odbierania danych oraz oczekiwanie w celu zachowania stalej czestatliwosci
     ros::spinOnce();
     loop_rate.sleep();
-
   }
 
   return 0;

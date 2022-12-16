@@ -11,7 +11,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-
 typedef int SOCKET_HANDLE;
 typedef unsigned int uint32;
 typedef int int32;
@@ -32,9 +31,9 @@ struct Response {
 	int32 tz;
 };
 
+//Klasa obsugi komunikacji
 class Communication
 {
-	
 	const int command_start = 0x0002;	//komenda rozpoczecia wysylania danych 
 	const int command_stop = 0x0000;	//komenda zakonczenia wysylania dancych
 	const int command_bias = 0x0042;	//komenda zerowania
@@ -52,17 +51,16 @@ class Communication
 	Response r;
 	ros::Time lastReceiveTime;
 
-	int speed;  //1000 / SPEED = Speed in Hz 
-	int filter; //0 = No filter; 1 = 500 Hz; 2 = 150 Hz; 3 = 50 Hz; 4 = 15 Hz; 5 = 5 Hz; 6 = 1.5 Hz 
+	int speed;  // 1000/speed = Speed in Hz 
+	int filter; // 0 = No filter; 1 = 500 Hz; 2 = 150 Hz; 3 = 50 Hz; 4 = 15 Hz; 5 = 5 Hz; 6 = 1.5 Hz 
 
 	int Connect(const char * ipAddress);
-	void showResponse(Response r);
 	void sendCommand(uint16 command, uint32 data);
 	void showResponce();
 	void prepare();
 	void reconnect();
 
-	public:
+public:
 
 	Communication(int Speed = 100, int Filter = 6);
 	~Communication();
@@ -75,7 +73,7 @@ class Communication
 //konstruktor proboje sie polaczyc z urzadzeniem, jesli sie uda wysyla komendy konfiguracyjne
 Communication::Communication(int Speed, int Filter)
 {
-	fprintf( stderr, "Usage: IPADDRESS: 10.42.0.50\n" );
+	fprintf( stderr, "Connection with IP: 10.42.0.50\n" );
 
 	speed = Speed;
 	filter = Filter;
@@ -168,7 +166,6 @@ bool Communication::receive()
 		reconnect();
 		return false;
 	}
-
 	//jezeli nie rozpoczeto transmisji danych to przerwij
 	if(!transmit)
 		return false;
@@ -176,7 +173,6 @@ bool Communication::receive()
 	byte inBuffer[36];
 	unsigned int uItems = 0;
 	int size = recv(socketHandle, (char *)inBuffer, 36, MSG_DONTWAIT);
-
 	if (size == 36)
 	{
 		lastReceiveTime = ros::Time::now();
@@ -193,7 +189,7 @@ bool Communication::receive()
 	}
 	else
 	{
-		if((ros::Time::now() - lastReceiveTime) >= ros::Duration(5.0))
+		if((ros::Time::now() - lastReceiveTime) >= ros::Duration(1.0))
 			connected = false;
 		
 		return false;
@@ -233,7 +229,7 @@ void Communication::prepare()
 void Communication::start()
 {
 	sendCommand(command_start, 0);
-	transmit = false;
+	transmit = true;
 }
 
 //wyslanie komendy zaprzestania wykonywania pomiarow
@@ -276,15 +272,14 @@ void ResetForce(geometry_msgs::Wrench &pom)
 
 int main ( int argc, char ** argv ) 
 {
-	ros::init(argc, argv, "signal");
+	ros::init(argc, argv, "sensor");
 	ros::NodeHandle m;
-	ros::Publisher signal = m.advertise<geometry_msgs::Wrench>("hex",1000);
+	ros::Publisher sensor = m.advertise<geometry_msgs::Wrench>("hex",1000);
 
 	geometry_msgs::Wrench pomiar;
 	ResetForce(pomiar);
 
 	Communication com;
-	
 	
 	com.start();
 	
@@ -296,7 +291,7 @@ int main ( int argc, char ** argv )
 		{
 			//jezeli odebrano dane to je pobierz i opublikuj na kanale "hex"
 			pomiar = com.getForce();
-			signal.publish(pomiar);
+			sensor.publish(pomiar);
 		}	
 		loop_rate.sleep();
 	}
