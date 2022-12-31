@@ -115,7 +115,7 @@ int Communication::Connect(const char * ipAddress)
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(port);
 	
-	err = connect(socketHandle, (struct sockaddr *)&addr, sizeof(addr));
+	err = connect(socketHandle, (struct sockaddr *)&addr, sizeof(addr));//ustawienie domyślnego adresu odbioru i wysyłania pakietów
 	if (err < 0) {
 		return -3;
 	}
