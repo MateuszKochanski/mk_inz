@@ -3,7 +3,6 @@ from geometry_msgs.msg import PoseStamped
 from std_msgs.msg import Header
 from geometry_msgs.msg import Pose
 import rospy
-from std_msgs.msg import String
 def point(name):
     data = {}
     return data[name]
@@ -12,6 +11,9 @@ def loadData(data):
     var.x = data.pose.position.x
     var.y = data.pose.position.y
     var.z = data.pose.position.z
+    var.rx = data.pose.orientation.x
+    var.ry = data.pose.orientation.y
+    var.rz = data.pose.orientation.z
     var.header = data.header
     var.k = True
     
@@ -22,12 +24,11 @@ if (__name__ == '__main__'):
     
 def callback(dane):
     if (dane.header.seq == 0):
-        var.stamp = dane.header.stamp
         loadData(dane)
+        var.c = True
         
-    elif (dane.header.stamp > var.stamp):
+    elif (dane.header.stamp > var.header.stamp) and var.c:
         loadData(dane)
-        var.stamp = dane.header.stamp
         
     
 def main():
@@ -38,12 +39,12 @@ def main():
     var.rx = -126.24999
     var.ry = 1.60902
     var.rz = -179.77854
+    var.c = False
     pub = rospy.Publisher('done', Header, queue_size=10)
     rospy.Subscriber('/sterowanie', PoseStamped, callback, queue_size=10)
-    es.move(type=es.Point, end=es.CartesianPos([var.x, var.y, var.z], [-126.24999, 1.60902, -179.77854], es.InternalPos([193.401, 89.597, 68.518, 110.514, 90.873, -130.335])), speed=20.0, acc=20.0)
+    es.move(type=es.Point, end=es.CartesianPos([var.x, var.y, var.z], [var.rx, var.ry, var.rz], es.InternalPos([193.401, 89.597, 68.518, 110.514, 90.873, -130.335])), speed=20.0, acc=20.0)
     es.execute_move()
     while True:
-        #es.move(type=es.Point, end=es.CartesianPos([var.x, var.y, var.z], [-126.24999, 1.60902, -179.77854], es.InternalPos([193.401, 89.597, 68.518, 110.514, 90.873, -130.335])), speed=20.0, acc=20.0)
         if (var.k == True):
             var.header.frame_id = 'accepted'
             pub.publish(var.header)
@@ -52,7 +53,3 @@ def main():
             var.header.frame_id = 'done'
             pub.publish(var.header)
             var.k = False
-            print(var.k)
-            
-        
-    
