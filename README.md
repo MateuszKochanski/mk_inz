@@ -18,7 +18,7 @@ Na podstawie danych na topicu "hex" oblicza nastepne punkty trajektorii robota o
   </a>
   
 </p>
-
+<!--
 ## Project Overview 🎉
 
 ## Tech/framework used 🔧
@@ -60,4 +60,4 @@ Na podstawie danych na topicu "hex" oblicza nastepne punkty trajektorii robota o
 
 ## Live 📍
 
-## License 🔱
+## License 🔱-->
