@@ -104,7 +104,7 @@ int Communication::Connect(const char * ipAddress)
 	struct hostent *he;	
 	int err;
 
-	socketHandle = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	socketHandle = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);//AF_INET - IPv4, SOCK_DGRAM - UDP (dla TCP SOCK_STREAM), ostatni to protocol (najczęsciej 0? nie wiem)
 
 	if (socketHandle == -1) { 
 		fprintf(stderr, "Socket could not be opened.\n");
@@ -115,7 +115,7 @@ int Communication::Connect(const char * ipAddress)
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(port);
 	
-	err = connect(socketHandle, (struct sockaddr *)&addr, sizeof(addr));
+	err = connect(socketHandle, (struct sockaddr *)&addr, sizeof(addr));//ustawienie domyślnego adresu odbioru i wysyłania pakietów
 	if (err < 0) {
 		return -3;
 	}
@@ -204,14 +204,14 @@ geometry_msgs::Wrench Communication::getForce()
 	static double force_div = 10000.0;
 	static double torque_div = 100000.0;
 
-    geometry_msgs::Wrench pomiar;
+    	geometry_msgs::Wrench pomiar;
 	    
 	pomiar.force.x = r.fx / force_div;
-    pomiar.force.y = r.fy / force_div;
-    pomiar.force.z = r.fz / force_div;
-    pomiar.torque.x = r.tx / torque_div;
-    pomiar.torque.y = r.ty / torque_div;
-    pomiar.torque.z = r.tz / torque_div;
+    	pomiar.force.y = r.fy / force_div;
+    	pomiar.force.z = r.fz / force_div;
+    	pomiar.torque.x = r.tx / torque_div;
+    	pomiar.torque.y = r.ty / torque_div;
+    	pomiar.torque.z = r.tz / torque_div;
 
     return pomiar;
 }
@@ -261,12 +261,12 @@ void Communication::showResponce()
 //zeroje wszystkie wartosci sil i momentow
 void ResetForce(geometry_msgs::Wrench &pom)
 {
-    pom.force.y = 0;
+	pom.force.y = 0;
 	pom.force.x = 0;
 	pom.force.z = 0;
-    pom.torque.x = 0;
-    pom.torque.y = 0;
-    pom.torque.z = 0;
+	pom.torque.x = 0;
+	pom.torque.y = 0;
+	pom.torque.z = 0;
 }
 
 
