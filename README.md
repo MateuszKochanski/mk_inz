@@ -1,3 +1,5 @@
+Jest to projekt wykonany w celu realizacji pracy inżynierskiej, której temat to: "Sterowanie robotem sześcioosiowym z wykorzystaniem urządzenia do pomiaru siły i momentu" 
+
 ## hex.cpp
 Na topicu "hex" publikuje dane z urzadzenia pomiarowego OnRobot Hex-e w formacie geometry_msgs::Wrench. Aby dzialal prawidlowo nalezy ustawic prawidlowy adres IP urzadzenia.
 
