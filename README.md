@@ -1,11 +1,12 @@
-Jest to projekt wykonany w celu realizacji pracy inżynierskiej, której temat to: "Sterowanie robotem sześcioosiowym z wykorzystaniem urządzenia do pomiaru siły i momentu" 
+# Traffic-simulator
+This is an ROS package that allows the control of a six-axis Easy Robots robot using an attached force and torque measurement device.
+## Description
+It consists of two nodes written in C++ and a robot control program written in Python. The task of the first node is to communicate with the force and torque measurement device, and to publish the received data on the ROS channel. The second node keeps track of the robot's current position and the force applied to the arm tip. Based on these, it calculates new positions and publishes them on the ROS channel. A program running on the robot receives the sentepositions and moves the manipulator tip to them.
 
-Przygotowano dwa węzły ROS napisane w języku C++ (hexCommunicator i controller) oraz program sterujący robota napisany w języku Python. Zadaniem pierwszego z węzłów jest komunikacja z urządzeniem do pomiaru siły i momentu obrotowego, oraz publikacja odbieranych danych na kanale ROS. Drugi węzeł śledzi aktualną pozycję robota oraz siłę przyłożoną do końcówki ramienia. Na ich podstawie oblicza nowe pozycje oraz publikuje je na kanale ROS. Program uruchamiany na robocie odbiera wysyłanepozycje oraz przemieszcza do nich końcówkę manipulatora.
-
-## hex.cpp
-Na topicu "hex" publikuje dane z urzadzenia pomiarowego OnRobot Hex-e w formacie geometry_msgs::Wrench. Aby dzialal prawidlowo nalezy ustawic prawidlowy adres IP urzadzenia.
+## Example
+How the application was tested is shown below. When a force was applied, the robot was observed to move towards it.
 ![Image](https://github.com/MateuszKochanski/mk_inz/blob/master/images/testy_.png)
-## controler.cpp
-Na podstawie danych na topicu "hex" oblicza nastepne punkty trajektorii robota oraz publikuje je na topicu "sterowanie".
-<h1 align="center">
 
+## Used
+
+[ROS](https://www.ros.org/),  [Ubuntu](https://ubuntu.com/download), [EasyRobots](https://easyrobots.pl/)
