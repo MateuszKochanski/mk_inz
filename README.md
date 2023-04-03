@@ -4,7 +4,7 @@ Przygotowano dwa węzły ROS napisane w języku C++ (hexCommunicator i controlle
 
 ## hex.cpp
 Na topicu "hex" publikuje dane z urzadzenia pomiarowego OnRobot Hex-e w formacie geometry_msgs::Wrench. Aby dzialal prawidlowo nalezy ustawic prawidlowy adres IP urzadzenia.
-![Image](https://github.com/MateuszKochanski/mk_inz/blob/master/images/testy.png)
+![Image](https://github.com/MateuszKochanski/mk_inz/blob/master/images/testy_.png)
 ## controler.cpp
 Na podstawie danych na topicu "hex" oblicza nastepne punkty trajektorii robota oraz publikuje je na topicu "sterowanie".
 <h1 align="center">
